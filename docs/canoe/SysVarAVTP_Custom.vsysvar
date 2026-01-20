@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<systemvariables version="4">
+  <namespace name="" comment="" interface="">
+    <namespace name="AVTP" comment="" interface="">
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ActivateLight" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" minValue="0" minValuePhys="0" maxValue="2" maxValuePhys="2" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ActivateStreaming_LT" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" minValue="0" minValuePhys="0" maxValue="2" maxValuePhys="2" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ActivateStreaming_RT" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" minValue="0" minValuePhys="0" maxValue="2" maxValuePhys="2" />
+    </namespace>
+    <namespace name="Canoe_Automation" comment="" interface="">
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Button_prepare_ref_run" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Button_prepare_ref_run_move" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Button_start_ref_run_left" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="grayValueNichia" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="grayValueOsram" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch1" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch1R" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch2" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch2R" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch3" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch3R" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch4" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LED_strings_Ch4R" comment="" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0" />
+    </namespace>
+    <namespace name="PANELS" comment="" interface="">
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="BtnAvtpStreamIdSelect" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ChangeLSMmode" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="gray20" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="gray20Nichia" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="hdrAutoMode" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" startValue="1" minValue="0" minValuePhys="0" maxValue="1" maxValuePhys="1" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Image1" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Image2" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Image3" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ImageNichia1" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ImageNichia2" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LsmDeviceType" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="OsramTest" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" />
+      <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="StartSteaming" comment="" bitcount="32" isSigned="true" encoding="65001" type="int" minValue="0" minValuePhys="0" maxValue="2" maxValuePhys="2">
+        <valuetable name="On_Off" definesMinMax="true">
+          <valuetableentry value="0" lowerBound="0" upperBound="0" description="Off" displayString="Off" />
+          <valuetableentry value="1" lowerBound="1" upperBound="1" description="On" displayString="On" />
+          <valuetableentry value="2" lowerBound="2" upperBound="2" description="Invalid" displayString="Invalid" />
+        </valuetable>
+      </variable>
+    </namespace>
+  </namespace>
+</systemvariables>

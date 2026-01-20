@@ -1,0 +1,23 @@
+[{
+  filename = "C:\_GitProj\AE\VS_Code_AE_Workspace\VideoSreamPlayer\VideoStreamPlayer\docs\Images\OSRAM_TestPic_grey.bmp";
+  prefix = "";
+  params = 
+  {
+    mapping = [{
+      source = "img";
+      dest = "img1";
+    }]
+    useStampFile = false;
+  }
+}, {
+  filename = "C:\_GitProj\AE\VS_Code_AE_Workspace\VideoSreamPlayer\VideoStreamPlayer\docs\Images\320x80_black.bmp";
+  prefix = "";
+  params = 
+  {
+    mapping = [{
+      source = "img";
+      dest = "img0";
+    }]
+    useStampFile = false;
+  }
+}]

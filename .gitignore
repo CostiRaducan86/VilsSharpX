@@ -1,0 +1,30 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Logs (keep if you want them versioned)
+# udp_rx.log
+# crash.log
+
+# Generated outputs (recordings/snapshots)
+docs/outputs/
+
+# Large sample inputs (pcap/avi) are kept locally
+docs/inputs/

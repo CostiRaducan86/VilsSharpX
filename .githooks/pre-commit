@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
+# Soft protection: disallow direct commits on main.
+# Allow merge commits on main (MERGE_HEAD exists while finalizing a merge).
+if [ "$branch" = "main" ]; then
+  merge_head="$(git rev-parse --git-path MERGE_HEAD 2>/dev/null || echo "")"
+  if [ -z "$merge_head" ] || [ ! -f "$merge_head" ]; then
+    echo "ERROR: Direct commits to 'main' are blocked by policy." >&2
+    echo "       Create a feature branch (or use 'dev'), then merge into main." >&2
+    echo "       To bypass (not recommended): git commit --no-verify" >&2
+    exit 1
+  fi
+fi
+
+exit 0
