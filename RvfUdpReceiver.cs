@@ -84,69 +84,22 @@ public sealed class RvfUdpReceiver : IDisposable
             catch { }
 
 
-            if (buf.Length < RvfProtocol.HeaderSize)
+            // Delegate UDP/RVF parsing to shared AVTP parser.
+            if (!AvtpRvfParser.TryParseRvfUdp(buf, out var chunk))
             {
-                LogLine($"DROP: too short for header (len={buf.Length} < {RvfProtocol.HeaderSize})");
+                LogLine("DROP: failed to parse RVFU payload");
                 continue;
             }
-
-            int m = FindMagic(buf);
-            if (m < 0)
-            {
-                int n = Math.Min(16, buf.Length);
-                var head = new System.Text.StringBuilder(n * 3);
-                for (int i = 0; i < n; i++) head.AppendFormat("{0:X2} ", buf[i]);
-                LogLine($"DROP: no RVFU magic in first 64 bytes. head={head}");
-                continue;
-            }
-
-            int o = m + 4;
-            if (buf.Length < o + (RvfProtocol.HeaderSize - 4))
-            {
-                LogLine("DROP: header truncated after magic");
-                continue;
-            }
-
-            byte ver = buf[o++];
-            ushort w = BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(o)); o += 2;
-            ushort h = BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(o)); o += 2;
-            ushort line = BinaryPrimitives.ReadUInt16LittleEndian(buf.AsSpan(o)); o += 2;
-            byte numLines = buf[o++];
-            bool endFrame = buf[o++] != 0;
-            uint frameId = BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(o)); o += 4;
-            uint seq = BinaryPrimitives.ReadUInt32LittleEndian(buf.AsSpan(o)); o += 4;
-
-            int payloadLen = numLines * w;
 
             try
             {
                 File.AppendAllText(LogPath,
-                    $"[{DateTime.Now:HH:mm:ss.fff}] RVFU@{m} ver={ver} w={w} h={h} line={line} num={numLines} end={endFrame} frameId={frameId} seq={seq} payloadLen={payloadLen}\r\n");
+                    $"[{DateTime.Now:HH:mm:ss.fff}] RVFU udp parsed w={chunk.Width} h={chunk.Height} line={chunk.LineNumber1Based} num={chunk.NumLines} end={chunk.EndFrame} frameId={chunk.FrameId} seq={chunk.Seq} payloadLen={chunk.Payload.Length}\r\n");
             }
             catch { }
 
-            if (ver != RvfProtocol.Version)
-            {
-                LogLine($"DROP: version mismatch (ver={ver} expected={RvfProtocol.Version})");
-                continue;
-            }
-
-            if (payloadLen <= 0 || payloadLen > 200000)
-            {
-                LogLine($"DROP: payloadLen out of range (payloadLen={payloadLen})");
-                continue;
-            }
-
-            if (buf.Length < o + payloadLen)
-            {
-                LogLine($"DROP: datagram too short for payload (len={buf.Length} need={o + payloadLen})");
-                continue;
-            }
-
-            var payload = new byte[payloadLen];
-            Buffer.BlockCopy(buf, o, payload, 0, payloadLen);
-
-            OnChunk?.Invoke(new RvfChunk(w, h, line, numLines, endFrame, frameId, seq, payload));
+            // Version check is implicit in parsing; deliver chunk
+            OnChunk?.Invoke(chunk);
         }
     }
 
