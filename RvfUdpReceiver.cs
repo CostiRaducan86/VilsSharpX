@@ -45,7 +45,7 @@ public sealed class RvfUdpReceiver : IDisposable
 
         static int FindMagic(byte[] buf)
         {
-            // caută "RVFU" în primii 64 bytes (tolerant la padding)
+            // search for "RVFU" in the first 64 bytes (tolerant to padding)
             int max = Math.Min(buf.Length - 4, 64);
             for (int i = 0; i <= max; i++)
             {
@@ -67,7 +67,7 @@ public sealed class RvfUdpReceiver : IDisposable
 
             var buf = res.Buffer;
 
-            // log RAW (ca să știm că intră ceva)
+            // log RAW (so we know something is coming in)
             try
             {
                 File.AppendAllText(LogPath,

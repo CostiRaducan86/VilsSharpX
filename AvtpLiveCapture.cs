@@ -10,16 +10,18 @@ public sealed class AvtpLiveCapture : IDisposable
 {
     private readonly ICaptureDevice _device;
     private readonly Action<RvfChunk> _onChunk;
+    private readonly Action<string>? _log;
 
     private uint _seq;
     private uint _frameId;
 
     private const string AvtpBpfFilter = "ether proto 0x22f0 or (vlan and ether proto 0x22f0) or (vlan and vlan and ether proto 0x22f0)";
 
-    private AvtpLiveCapture(ICaptureDevice device, Action<RvfChunk> onChunk)
+    private AvtpLiveCapture(ICaptureDevice device, Action<RvfChunk> onChunk, Action<string>? log)
     {
         _device = device;
         _onChunk = onChunk;
+        _log = log;
     }
 
     public static IReadOnlyList<(string Name, string Description)> ListDevicesSafe()
@@ -142,7 +144,7 @@ public sealed class AvtpLiveCapture : IDisposable
         if (LooksLikeWanMiniport(dev))
             log?.Invoke("[avtp-live] warning: selected a WAN Miniport. This usually won't see ECU/VN5620 traffic; pick the actual Ethernet adapter in the NIC dropdown.");
 
-        var cap = new AvtpLiveCapture(dev, onChunk);
+        var cap = new AvtpLiveCapture(dev, onChunk, log);
 
         // Promiscuous so we don't depend on destination MAC.
         // Timeout to allow clean shutdown.
@@ -190,7 +192,10 @@ public sealed class AvtpLiveCapture : IDisposable
 
             _onChunk(chunk);
 
-            if (endFrame) _frameId++;
+            if (endFrame) {
+                _frameId++;
+                _log?.Invoke($"AVTP frame READY: seq={chunk.Seq} line={chunk.LineNumber1Based} end={chunk.EndFrame} bytes={(payload?.Length ?? 0)}");
+            }
         }
         catch
         {

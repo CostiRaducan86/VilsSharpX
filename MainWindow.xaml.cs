@@ -237,6 +237,62 @@ namespace VideoStreamPlayer
         // "Signal not available" -> last frame -> "Signal not available".
         private DateTime _suppressLiveUntilUtc = DateTime.MinValue;
 
+        // --- PlayerFromFiles: when STOP, keep AVTP alive by sending BLACK frames ---
+        private CancellationTokenSource? _txBlackCts;
+        private Task? _txBlackTask;
+        private static readonly byte[] _black320x80 = new byte[320 * 80];
+
+        private void StartBlackTxLoop(int fps)
+        {
+            StopBlackTxLoop();
+
+            if (_tx == null) return;
+            if (fps <= 0) fps = 100;
+
+            _txBlackCts = new CancellationTokenSource();
+            var ct = _txBlackCts.Token;
+
+            _txBlackTask = Task.Run(async () =>
+            {
+                var period = TimeSpan.FromMilliseconds(1000.0 / fps);
+
+                while (!ct.IsCancellationRequested)
+                {
+                    try
+                    {
+                        // Send one BLACK frame (20 packets) in the same AVTP format
+                        await _tx.SendFrame320x80Async(_black320x80, ct);
+                        await Task.Delay(period, ct);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex)
+                    {
+                        AppendUdpLog($"[avtp-tx] BLACK loop error: {ex.GetType().Name}: {ex.Message}");
+                        break;
+                    }
+                }
+            }, ct);
+
+            AppendUdpLog($"[avtp-tx] BLACK loop started @ {fps} fps");
+        }
+
+        private void StopBlackTxLoop()
+        {
+            try
+            {
+                _txBlackCts?.Cancel();
+                _txBlackCts?.Dispose();
+            }
+            catch { }
+            finally
+            {
+                _txBlackCts = null;
+                _txBlackTask = null;
+            }
+        }
+
+
+
         private bool IsLiveInputSuppressed()
         {
             if (_modeOfOperation != ModeOfOperation.AvtpLiveMonitor) return false;
@@ -269,6 +325,8 @@ namespace VideoStreamPlayer
         private readonly object _rvfPushLock = new();
 
         private AvtpLiveCapture? _avtpLive;
+
+        private AvtpRvfTransmitter? _tx;
 
         private enum AvtpFeed
         {
@@ -986,11 +1044,29 @@ namespace VideoStreamPlayer
                     if (incomplete || gap) Interlocked.Increment(ref _countAvtpDropped);
 
                     // store latest frame
+                    // Live streams may come as 320x80 (expected) OR 320x84 (bottom 4 lines are metadata).
+                    // We always display/calculate on the active 320x80 area.
+                    byte[]? useFrame = null;
                     if (frame.Length == W * H_ACTIVE)
                     {
-                        _avtpFrame = frame;       // replace buffer (simple & safe)
+                        useFrame = frame;
+                    }
+                    else if (frame.Length == W * (H_ACTIVE + 4))
+                    {
+                        useFrame = new byte[W * H_ACTIVE];
+                        Buffer.BlockCopy(frame, 0, useFrame, 0, useFrame.Length);
+                    }
+
+                    if (useFrame != null)
+                    {
+                        _avtpFrame = useFrame;       // replace buffer (simple & safe)
                         _hasAvtpFrame = true;
                         _lastAvtpFrameUtc = DateTime.UtcNow;
+                        // Increment _countB for AVTP Live mode FPS tracking
+                        if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+                        {
+                            Interlocked.Increment(ref _countB);
+                        }
                     }
 
                     int lateSkip = Volatile.Read(ref _countLateFramesSkipped);
@@ -1335,6 +1411,46 @@ namespace VideoStreamPlayer
             CmbLiveNic.SelectedIndex = idx;
         }
 
+        private string? GetTxPcapDeviceNameOrNull()
+        {
+            // 1) if the user explicitly selected from the combo (CmbLiveNic), use that NPF name
+            try
+            {
+                if (CmbLiveNic?.SelectedItem is LiveNicItem item && !string.IsNullOrWhiteSpace(item.DeviceName))
+                    return item.DeviceName;
+            }
+            catch { /* ignore */ }
+        
+            // 2) fallback: try to find by hint (description/MAC) in the pcap device list
+            string hint = _avtpLiveDeviceHint ?? string.Empty;
+        
+            try
+            {
+                var devs = CaptureDeviceList.Instance
+                    .OfType<SharpPcap.LibPcap.LibPcapLiveDevice>()
+                    .ToList();
+        
+                // a) match by hint in Name/Description
+                if (!string.IsNullOrWhiteSpace(hint))
+                {
+                    var hit = devs.FirstOrDefault(d =>
+                        (!string.IsNullOrWhiteSpace(d.Description) && d.Description.Contains(hint, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(d.Name) && d.Name.Contains(hint, StringComparison.OrdinalIgnoreCase)));
+        
+                    if (hit != null) return hit.Name;
+                }
+        
+                // b) alternative fallback: first non-loopback card
+                var first = devs.FirstOrDefault(d => !LooksLikeLoopbackDevice(d.Name, d.Description));
+                return first?.Name;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+
         private void UpdateLiveUiEnabledState()
         {
             bool isLive = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
@@ -1465,7 +1581,27 @@ namespace VideoStreamPlayer
             }
         }
 
-        private void BtnStop_Click(object sender, RoutedEventArgs e) => StopAll();
+        private void BtnStop_Click(object sender, RoutedEventArgs e)
+        {
+            // If we are in Generator/Player: STOP => keep AVTP alive by sending BLACK
+            if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
+            {
+                int fps = 100;
+                _ = int.TryParse(TxtFps.Text, out fps);
+
+                // Stop UI/loops as before
+                StopAll();
+
+                // Start BLACK TX loop (do NOT stop transmitter)
+                StartBlackTxLoop(fps);
+
+                LblStatus.Text = "Player STOP: sending BLACK AVTP (Signal not available).";
+                return;
+            }
+
+            // AVTP Live: normal stop
+            StopAll();
+        }
 
         private void BtnRecord_Click(object sender, RoutedEventArgs e)
         {
@@ -1789,8 +1925,18 @@ namespace VideoStreamPlayer
             lock (_frameLock)
             {
                 _pausedA = _latestA ?? new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
-                _pausedB = _latestB ?? _pausedA;
-                _pausedD = _latestD ?? AbsDiff(_pausedA, _pausedB);
+
+                if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+                {
+                    // In AVTP Live mode, B is derived from A using the UI delta; D is derived from (B-A).
+                    _pausedB = new Frame(W, H_ACTIVE, ApplyValueDelta(_pausedA.Data, _bValueDelta), _pausedA.TimestampUtc);
+                    _pausedD = AbsDiff(_pausedA, _pausedB);
+                }
+                else
+                {
+                    _pausedB = _latestB ?? _pausedA;
+                    _pausedD = _latestD ?? AbsDiff(_pausedA, _pausedB);
+                }
             }
 
             // Re-render once from the frozen snapshot to avoid any race with in-flight frame updates.
@@ -2017,23 +2163,24 @@ namespace VideoStreamPlayer
 
         private void Start(int fps)
         {
-            StopRenderLoops();
+            StopBlackTxLoop();
+            // Safety: if already running, stop first
+            if (_cts != null)
+                StopAll();
 
             _targetFps = fps;
 
+            // -----------------------------
+            // Init run state
+            // -----------------------------
             _cts = new CancellationTokenSource();
+            _isRunning = true;
+            _isPaused = false;
+            _pauseGate.Set();
 
-            // Starting a new run: require a fresh first frame before leaving the "waiting" state.
-            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
-            {
-                _hasAvtpFrame = false;
-                _lastAvtpFrameUtc = DateTime.MinValue;
-                _rvf.ResetAll();
-                try { Array.Clear(_avtpFrame, 0, _avtpFrame.Length); } catch { }
-                Volatile.Write(ref _activeAvtpFeed, (int)AvtpFeed.None);
-            }
+            AppendUdpLog($"[start] mode={_modeOfOperation}, fps={fps}");
 
-            // Now that we're running, show the panes and enable compare/dead-pixel tools.
+            // Reset runtime stats
             ApplyNoSignalUiState(noSignal: false);
             _countA = _countB = _countD = 0;
             _countAvtpIn = 0;
@@ -2043,25 +2190,83 @@ namespace VideoStreamPlayer
             _sumAvtpSeqGaps = 0;
             _countLateFramesSkipped = 0;
             _statSw.Restart();
+            _avtpInFpsEma = 0.0;
+            _bFpsEma = 0.0;
+            _wasWaitingForSignal = false;
 
-            // (active feed already reset above for live mode; keep the reset for all modes)
+            // Reset feed selection + reassembler state
             Volatile.Write(ref _activeAvtpFeed, (int)AvtpFeed.None);
+            _rvf.ResetAll();
+            _hasAvtpFrame = false;
+            _lastAvtpFrameUtc = DateTime.MinValue;
 
-            // Default status source label before the first frame arrives.
+            // Default source label before first frame
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
             {
                 if (_avtpLiveEnabled) _lastRvfSrcLabel = "Ethernet/AVTP";
                 else if (_avtpLiveUdpEnabled) _lastRvfSrcLabel = "UDP/RVFU";
+                // Explicitly force the 'Waiting for signal...' state at first start
+                EnterWaitingForSignalState();
             }
             else if (_lastLoaded == LoadedSource.Pcap)
             {
                 _lastRvfSrcLabel = "PCAP";
             }
 
-            _ = Task.Run(() => GeneratorLoop(fps, _cts.Token));
-            _ = Task.Run(() => UiRefreshLoop(_cts.Token));
+            // -------------------------------------------------
+            // TX init (ONLY in Generator/Player mode)
+            // -------------------------------------------------
+            try
+            {
+                if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
+                {
+                    var devName = _avtpLiveDeviceHint; // use exactly the device selected in the NIC dropdown
+                    if (!string.IsNullOrWhiteSpace(devName))
+                    {
+                        _tx = new AvtpRvfTransmitter(devName);
+                        AppendUdpLog($"[avtp-tx] TX ready on {devName}");
+                    }
+                    else
+                    {
+                        AppendUdpLog("[avtp-tx] TX disabled: no TX device selected/found.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendUdpLog($"[avtp-tx] TX init ERROR: {ex.GetType().Name}: {ex.Message}");
+                try { _tx?.Dispose(); } catch { }
+                _tx = null;
+            }
 
-            // If last loaded source was a PCAP, Start should begin replay (only in Player mode).
+            // -------------------------------------------------
+            // Start loops
+            // -------------------------------------------------
+            if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
+            {
+                // Generator/Player:
+                _ = Task.Run(() => GeneratorLoopAsync(fps, _cts.Token));
+                _ = Task.Run(() => UiRefreshLoop(_cts.Token));
+
+                LblStatus.Text = $"Running Player @ {fps} fps (AVTP TX enabled)";
+            }
+            else
+            {
+                // AVTP Live Monitor:
+                _ = Task.Run(() => UiRefreshLoop(_cts.Token));
+
+                // Until the first frame arrives, show explicit waiting message.
+                LblStatus.Text =
+                    $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
+                    (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
+                    $". (log: {GetUdpLogPath()})";
+
+                _wasWaitingForSignal = true;
+            }
+
+            // -------------------------------------------------
+            // Auto start PCAP replay (ONLY in Player mode)
+            // -------------------------------------------------
             if (_modeOfOperation == ModeOfOperation.PlayerFromFiles
                 && _lastLoaded == LoadedSource.Pcap
                 && !string.IsNullOrWhiteSpace(_lastLoadedPcapPath))
@@ -2069,17 +2274,30 @@ namespace VideoStreamPlayer
                 StartPcapReplay(_lastLoadedPcapPath);
             }
 
-            // Live sources are enabled only in AVTP Live mode.
-            // (Player mode uses file-backed sources and PCAP replay; no background live sniffing.)
+            // -------------------------------------------------
+            // Start live sources ONLY in AVTP Live mode
+            // -------------------------------------------------
             bool allowLiveSources = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
             if (allowLiveSources)
             {
-                // Start Ethernet capture once (best-effort; requires Npcap)
-                if (_avtpLiveEnabled && _avtpLive == null)
+                // Ethernet capture (Npcap)
+                // NOTE: We always (re)start capture on Start in AVTP Live mode.
+                // Reason: at app startup, the NIC selection / device hint may change after settings load,
+                // and keeping an old capture instance can leave the UI stuck on the fallback image until Stop->Start.
+                if (_avtpLiveEnabled)
                 {
                     try
                     {
-                        // Log available devices to help choosing AvtpLiveDeviceHint.
+                        // Ensure we use the NIC currently selected in the UI (avoids slow/incorrect auto-pick).
+                        string? deviceHint = _avtpLiveDeviceHint;
+                        if (CmbLiveNic?.SelectedItem is LiveNicItem sel && !string.IsNullOrWhiteSpace(sel.DeviceName))
+                            deviceHint = sel.DeviceName;
+
+                        // Persist the final hint so next Start uses the same interface.
+                        _avtpLiveDeviceHint = deviceHint;
+
+                        try { _avtpLive?.Dispose(); } catch { }
+                        _avtpLive = null;
                         var devs = AvtpLiveCapture.ListDevicesSafe();
                         if (devs.Count > 0)
                         {
@@ -2089,7 +2307,7 @@ namespace VideoStreamPlayer
                         }
 
                         _avtpLive = AvtpLiveCapture.Start(
-                            deviceHint: _avtpLiveDeviceHint,
+                            deviceHint: deviceHint,
                             log: msg => AppendUdpLog(msg),
                             onChunk: chunk =>
                             {
@@ -2111,10 +2329,9 @@ namespace VideoStreamPlayer
                     }
                 }
 
-                // Optional: also listen for RVFU over UDP in live mode.
+                // Optional UDP/RVFU
                 if (_avtpLiveUdpEnabled)
                 {
-                    // Start UDP receiver once
                     if (_udpCts == null)
                     {
                         _udpCts = new CancellationTokenSource();
@@ -2130,14 +2347,6 @@ namespace VideoStreamPlayer
                             if (!TrySetActiveAvtpFeed(AvtpFeed.UdpRvf))
                                 return;
 
-                            try
-                            {
-                                AppendUdpLog(
-                                    $"[udp] OnChunk w={c.Width} h={c.Height} line={c.LineNumber1Based} num={c.NumLines} " +
-                                    $"end={c.EndFrame} frameId={c.FrameId} seq={c.Seq} payload={c.Payload.Length}");
-                            }
-                            catch { /* ignore */ }
-
                             lock (_rvfPushLock)
                             {
                                 _rvf.Push(c);
@@ -2148,26 +2357,7 @@ namespace VideoStreamPlayer
                     }
                 }
             }
-
-            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
-            {
-                // Until the first frame arrives, show an explicit waiting message and 0 fps.
-                LblStatus.Text =
-                    $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
-                    (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
-                    $". (log: {GetUdpLogPath()})";
-
-                _wasWaitingForSignal = true;
-            }
-            else
-            {
-                LblStatus.Text =
-                    $"Running @ {fps} fps (Mode=Player). (log: {GetUdpLogPath()})";
-
-                _wasWaitingForSignal = false;
-            }
-
-            _runningStatusText = LblStatus.Text;
+            
         }
 
         private void StartPcapReplay(string path)
@@ -2984,40 +3174,71 @@ namespace VideoStreamPlayer
             return (prev <= 0) ? value : (prev + alpha * (value - prev));
         }
 
-        private void GeneratorLoop(int fps, CancellationToken ct)
+        private async Task GeneratorLoopAsync(int fps, CancellationToken ct)
         {
-            var period = TimeSpan.FromSeconds(1.0 / fps);
+            AppendUdpLog($"[generator] Entered GeneratorLoop, mode={_modeOfOperation}, fps={fps}");
+            var period = TimeSpan.FromSeconds(1.0 / Math.Max(1, fps));
             var sw = Stopwatch.StartNew();
             var next = sw.Elapsed;
-
+        
+            int txErrOnce = 0;
+            int txNoDevOnce = 0;
+        
             while (!ct.IsCancellationRequested)
             {
                 try { _pauseGate.Wait(ct); }
                 catch { break; }
-
+        
                 next += period;
-
-                // A: either UDP latest or PGM fallback
+        
+                // A: either UDP latest or PGM/AVI/Scene fallback (depending on what you loaded)
                 var aBytes = GetASourceBytes();
                 var a = new Frame(W, H_ACTIVE, aBytes, DateTime.UtcNow);
                 Interlocked.Increment(ref _countA);
-
-                // B: simulated LVDS = A with value delta (brightness shift)
+        
+                // B: simulated LVDS = A with brightness delta
                 var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
                 var b = new Frame(W, H_ACTIVE, bBytes, DateTime.UtcNow);
                 Interlocked.Increment(ref _countB);
-
-                // diff
+        
+                // D: diff
                 var d = AbsDiff(a, b);
-
-                // If pause was engaged mid-iteration, don't publish a new frame.
+        
+                // -----------------------------
+                // AVTP Ethernet TX (ONLY PlayerFromFiles)
+                // -----------------------------
+                if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
+                {
+                    if (_tx != null)
+                    {
+                        try
+                        {
+                            // IMPORTANT: send frame "A" (320x80 Gray8)
+                            await _tx.SendFrame320x80Async(a.Data, ct);
+                        }
+                        catch (OperationCanceledException) { break; }
+                        catch (Exception ex)
+                        {
+                            // log only once to avoid spamming
+                            if (Interlocked.Exchange(ref txErrOnce, 1) == 0)
+                                AppendUdpLog($"[avtp-tx] SEND ERROR (first): {ex.GetType().Name}: {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        if (Interlocked.Exchange(ref txNoDevOnce, 1) == 0)
+                            AppendUdpLog("[avtp-tx] TX is NULL -> nothing will be sent (select NIC and press Start).");
+                    }
+                }
+        
+                // If pause was activated exactly during the iteration, do not publish frame
                 if (_isPaused || !_pauseGate.IsSet)
                 {
                     if (Interlocked.Increment(ref _countLateFramesSkipped) == 1)
                         AppendUdpLog("[ui] generator skipped publish due to pause race (late frame)");
                     continue;
                 }
-
+        
                 lock (_frameLock)
                 {
                     _latestA = a;
@@ -3025,7 +3246,7 @@ namespace VideoStreamPlayer
                     _latestD = d;
                 }
                 Interlocked.Increment(ref _countD);
-
+        
                 // pace
                 var now = sw.Elapsed;
                 var sleep = next - now;
@@ -3134,6 +3355,15 @@ namespace VideoStreamPlayer
                     b = _latestB ?? a;
                     d = _latestD ?? AbsDiff(a, b);
                 }
+            }
+
+            
+            // In AVTP Live mode, B is not coming from a file; it is derived from A using the UI delta,
+            // and D is derived from (B-A). This keeps behavior identical between Live and Player modes.
+            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_isPaused)
+            {
+                b = new Frame(W, H_ACTIVE, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
+                d = AbsDiff(a, b);
             }
 
             // B post-processing (forced dead pixel + optional compensation)
