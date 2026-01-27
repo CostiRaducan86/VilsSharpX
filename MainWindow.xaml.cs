@@ -102,7 +102,7 @@ namespace VideoStreamPlayer
         // Live AVTP capture settings (Ethernet via SharpPcap)
         private bool _avtpLiveEnabled = true;
         private string? _avtpLiveDeviceHint;
-        private bool _avtpLiveUdpEnabled = true;
+        private bool _avtpLiveUdpEnabled = false;
 
         private ModeOfOperation _modeOfOperation = ModeOfOperation.AvtpLiveMonitor;
 

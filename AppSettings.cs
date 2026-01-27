@@ -25,8 +25,9 @@ public sealed class AppSettings
     public string? AvtpLiveDeviceHint { get; set; } = null;
 
     // Optional: also listen for RVFU over UDP in AVTP Live mode.
-    // UI toggle was removed; keep it configurable via settings.json.
-    public bool AvtpLiveUdpEnabled { get; set; } = true;
+    // NOTE: UDP/RVFU support is preserved in source for reference but disabled by default.
+    // The UI toggle was removed; keep it configurable via settings.json if needed.
+    public bool AvtpLiveUdpEnabled { get; set; } = false;
 
     // 0 = player (files/pcap/avi/scene), 1 = live AVTP monitor
     public int ModeOfOperation { get; set; } = 1;
