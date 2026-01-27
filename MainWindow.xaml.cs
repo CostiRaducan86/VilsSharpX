@@ -1087,7 +1087,7 @@ namespace VideoStreamPlayer
             };
 
             ShowIdleGradient();
-            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
+            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering.";
 
             LoadUiSettings();
 
@@ -3324,9 +3324,7 @@ namespace VideoStreamPlayer
                 if (!_wasWaitingForSignal && LblStatus != null)
                 {
                     LblStatus.Text =
-                        $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
-                        (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
-                        $". (log: {GetUdpLogPath()})";
+                        $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort.";
                     _runningStatusText = LblStatus.Text;
                 }
                 _wasWaitingForSignal = true;
