@@ -1,3 +1,10 @@
+// DEPRECATED: RVF reassembler
+//
+// This file contains the RVF reassembly logic used to reconstruct 320×80 frames from
+// incoming RVF/AVTP chunks. The reassembler is kept in source for traceability and
+// potential future reuse, but the project disables automatic UDP/RVFU reception by
+// default and uses the Ethernet/AVTP capture as the primary live input.
+
 using System;
 namespace VideoStreamPlayer;
 

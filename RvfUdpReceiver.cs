@@ -1,3 +1,11 @@
+// DEPRECATED: UDP/RVF receiver
+//
+// This file implements a UDP receiver for RVF-formatted AVTP payloads. UDP/RVFU support
+// is preserved here for reference and potential future re-enablement, but the application
+// disables this path by default and does not start the receiver unless explicitly enabled
+// via settings. The active AVTP capture path (Ethernet via SharpPcap) remains the
+// recommended approach.
+
 using System;
 using System.Buffers.Binary;
 using System.Net;
