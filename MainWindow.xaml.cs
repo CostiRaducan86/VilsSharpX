@@ -102,7 +102,7 @@ namespace VideoStreamPlayer
         // Live AVTP capture settings (Ethernet via SharpPcap)
         private bool _avtpLiveEnabled = true;
         private string? _avtpLiveDeviceHint;
-        private bool _avtpLiveUdpEnabled = false;
+        private bool _avtpLiveUdpEnabled = true;
 
         private ModeOfOperation _modeOfOperation = ModeOfOperation.AvtpLiveMonitor;
 
@@ -1087,7 +1087,7 @@ namespace VideoStreamPlayer
             };
 
             ShowIdleGradient();
-            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering.";
+            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
 
             LoadUiSettings();
 
@@ -2266,7 +2266,7 @@ namespace VideoStreamPlayer
                 // Until the first frame arrives, show explicit waiting message.
                 LblStatus.Text =
                     $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
-                    (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:50070" : "") +
+                    (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
                     $". (log: {GetUdpLogPath()})";
 
                 _wasWaitingForSignal = true;
@@ -2343,9 +2343,9 @@ namespace VideoStreamPlayer
                     if (_udpCts == null)
                     {
                         _udpCts = new CancellationTokenSource();
-                        _udp = new RvfUdpReceiver(50070);
+                        _udp = new RvfUdpReceiver(RvfProtocol.DefaultPort);
 
-                        AppendUdpLog($"UDP start on 0.0.0.0:50070");
+                        AppendUdpLog($"UDP start on 0.0.0.0:{RvfProtocol.DefaultPort}");
 
                         _udp.OnChunk += c =>
                         {
@@ -3332,7 +3332,9 @@ namespace VideoStreamPlayer
                 if (!_wasWaitingForSignal && LblStatus != null)
                 {
                     LblStatus.Text =
-                        $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort.";
+                        $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
+                        (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
+                        $". (log: {GetUdpLogPath()})";
                     _runningStatusText = LblStatus.Text;
                 }
                 _wasWaitingForSignal = true;
@@ -3904,26 +3906,24 @@ namespace VideoStreamPlayer
 
             // Use visual transforms so hover mapping matches overlay mapping exactly.
             Point pOvr = e.GetPosition(ovr);
-            // Map mouse position from overlay to image. If the overlay->image transform
-            // can't be resolved (overlay may be temporarily unavailable while running),
-            // fall back to the mouse position relative to the image directly.
+            GeneralTransform ovrToImg;
+            try
+            {
+                ovrToImg = ovr.TransformToVisual(img);
+            }
+            catch
+            {
+                return false;
+            }
+
             Point pImg;
             try
             {
-                var ovrToImg = ovr.TransformToVisual(img);
                 pImg = ovrToImg.Transform(pOvr);
             }
             catch
             {
-                // Fallback: use mouse position relative to image control.
-                try
-                {
-                    pImg = e.GetPosition(img);
-                }
-                catch
-                {
-                    return false;
-                }
+                return false;
             }
 
             double lx = pImg.X;
