@@ -9,8 +9,8 @@ public static class AvtpRvfParser
     private const ushort EtherTypeAvtp = 0x22F0;
     private const int AvtpPayloadOffset = 32;
 
-    private const int W = RvfProtocol.W;
-    private const int H = RvfProtocol.H;
+    private const int W = 320;
+    private const int H = 80;
     private const int NumLines = 4;
     private const int PayloadBytes = W * NumLines; // 1280
 

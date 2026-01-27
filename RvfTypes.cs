@@ -1,11 +1,4 @@
+// Deprecated placeholder. RvfChunk moved to RvfReassembler.cs
 namespace VideoStreamPlayer;
 
-public sealed record RvfChunk(
-    ushort Width,
-    ushort Height,
-    ushort LineNumber1Based,
-    byte NumLines,
-    bool EndFrame,
-    uint FrameId,
-    uint Seq,
-    byte[] Payload);
+// Intentionally empty. Do not reintroduce RvfChunk here.

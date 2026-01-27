@@ -8,10 +8,20 @@
 using System;
 namespace VideoStreamPlayer;
 
+public sealed record RvfChunk(
+    ushort Width,
+    ushort Height,
+    ushort LineNumber1Based,
+    byte NumLines,
+    bool EndFrame,
+    uint FrameId,
+    uint Seq,
+    byte[] Payload);
+
 public sealed class RvfReassembler
 {
-    public const int W = RvfProtocol.W;
-    public const int H = RvfProtocol.H;
+    public const int W = 320;
+    public const int H = 80;
 
     private readonly byte[] _frame = new byte[W * H];
     private readonly bool[] _lineWritten = new bool[H];
