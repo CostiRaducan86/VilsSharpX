@@ -586,12 +586,78 @@ namespace VideoStreamPlayer
                 var bLive = _latestB;
                 var dLive = _latestD;
 
+                // Fallback: if no composed Frame exists yet but we do have raw AVTP bytes,
+                // construct a lightweight Frame so cursor hover can show values while live.
+                if (aLive == null && Volatile.Read(ref _hasAvtpFrame))
+                {
+                    try
+                    {
+                        var copy = Copy(_avtpFrame);
+                        aLive = new Frame(W, H_ACTIVE, copy, _lastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _lastAvtpFrameUtc);
+                    }
+                    catch
+                    {
+                        // safe fallback: leave aLive null if allocation fails
+                        aLive = null;
+                    }
+                }
+
+                // Also construct a B fallback if missing (apply UI B delta to A or raw AVTP bytes).
+                if (bLive == null && Volatile.Read(ref _hasAvtpFrame))
+                {
+                    try
+                    {
+                        if (aLive != null)
+                        {
+                            var bBytes = ApplyValueDelta(aLive.Data, _bValueDelta);
+                            bLive = new Frame(W, H_ACTIVE, bBytes, aLive.TimestampUtc);
+                        }
+                        else
+                        {
+                            var copyB = Copy(_avtpFrame);
+                            var bBytes = ApplyValueDelta(copyB, _bValueDelta);
+                            bLive = new Frame(W, H_ACTIVE, bBytes, _lastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _lastAvtpFrameUtc);
+                        }
+                    }
+                    catch
+                    {
+                        bLive = null;
+                    }
+                }
+
                 if (pane == Pane.B)
                 {
                     if (aLive == null && bLive == null) return null;
                     aLive ??= bLive;
                     bLive ??= aLive;
                     return (aLive != null && bLive != null) ? ApplyBPostProcessing(aLive, bLive) : null;
+                }
+
+                // If D is missing but A/B are available, synthesize D from A/B so the diff pane hover works.
+                if (dLive == null)
+                {
+                    try
+                    {
+                        if (aLive != null && bLive != null)
+                        {
+                            dLive = AbsDiff(aLive, bLive);
+                        }
+                        else if (aLive == null && bLive != null)
+                        {
+                            var aFallback = new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
+                            dLive = AbsDiff(aFallback, bLive);
+                        }
+                        else if (aLive != null && bLive == null)
+                        {
+                            var bFallbackBytes = ApplyValueDelta(aLive.Data, _bValueDelta);
+                            var bFallback = new Frame(W, H_ACTIVE, bFallbackBytes, aLive.TimestampUtc);
+                            dLive = AbsDiff(aLive, bFallback);
+                        }
+                    }
+                    catch
+                    {
+                        dLive = null;
+                    }
                 }
 
                 return pane switch
@@ -3866,6 +3932,8 @@ namespace VideoStreamPlayer
 
         private void ShowPixelInfo(MouseEventArgs e, Frame? f, System.Windows.Controls.TextBlock lbl)
         {
+            // Do not show pixel info when signal is not available (idle/no-signal UI).
+            if (_cts == null || ShouldShowNoSignalWhileRunning()) { lbl.Text = ""; return; }
             if (f == null) { lbl.Text = ""; return; }
             if (!TryGetPixelXYFromMouse(e, f, out int x, out int y)) { lbl.Text = ""; return; }
 
@@ -3878,6 +3946,9 @@ namespace VideoStreamPlayer
         {
             // Pane D displays deviation in BGR derived from A vs post-processed B.
             // For hover, show signed diff (B−A) plus A/B values at that pixel.
+            // If signal not available (no-signal UI), don't show info.
+            if (_cts == null || ShouldShowNoSignalWhileRunning()) { lbl.Text = ""; return; }
+
             var a = GetDisplayedFrameForPane(Pane.A);
             var b = GetDisplayedFrameForPane(Pane.B); // includes post-processing
             var refFrame = a ?? b;
