@@ -166,7 +166,7 @@ namespace VideoStreamPlayer
 
         // NEW: latest AVTP frame coming from UDP (320x80). If never received, it stays zero.
         private byte[] _avtpFrame = new byte[W * H_ACTIVE];
-        private volatile bool _hasAvtpFrame = false;
+        private bool _hasAvtpFrame = false;
 
         private Frame? _latestA;
         private Frame? _latestB;
@@ -380,7 +380,7 @@ namespace VideoStreamPlayer
             if (_modeOfOperation != ModeOfOperation.AvtpLiveMonitor) return false;
 
             // In AVTP Live mode, keep panes in "Signal not available" until first valid frame arrives.
-            return !_hasAvtpFrame;
+            return !Volatile.Read(ref _hasAvtpFrame);
         }
 
         private void EnterWaitingForSignalState()
@@ -397,7 +397,7 @@ namespace VideoStreamPlayer
                 $"suppressMs={1000.ToString(CultureInfo.InvariantCulture)}");
 
             // Drop the last received frame and revert to the no-signal rendering path.
-            _hasAvtpFrame = false;
+            Volatile.Write(ref _hasAvtpFrame, false);
             _lastAvtpFrameUtc = DateTime.MinValue;
 
             // Debounce: ignore late buffered live packets for a short time.
@@ -1126,7 +1126,7 @@ namespace VideoStreamPlayer
                     if (useFrame != null)
                     {
                         _avtpFrame = useFrame;       // replace buffer (simple & safe)
-                        _hasAvtpFrame = true;
+                        Volatile.Write(ref _hasAvtpFrame, true);
                         _lastAvtpFrameUtc = DateTime.UtcNow;
                         // Increment _countB for AVTP Live mode FPS tracking
                         if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
@@ -2120,7 +2120,7 @@ namespace VideoStreamPlayer
             ClearAvi();
             _avtpInFpsEma = 0.0;
             // Switching sources: drop any previously replayed/received AVTP frame
-            _hasAvtpFrame = false;
+            Volatile.Write(ref _hasAvtpFrame, false);
 
             (int width, int height, byte[] data) img = LoadImageAsGray8(path);
 
@@ -2148,7 +2148,7 @@ namespace VideoStreamPlayer
             ClearAvi();
 
             // Switching sources: stop using previously replayed/received AVTP frame
-            _hasAvtpFrame = false;
+            Volatile.Write(ref _hasAvtpFrame, false);
 
             _avi = AviUncompressedVideoReader.Open(path);
             _aviPath = path;
@@ -2271,7 +2271,7 @@ namespace VideoStreamPlayer
             // Reset feed selection + reassembler state
             Volatile.Write(ref _activeAvtpFeed, (int)AvtpFeed.None);
             _rvf.ResetAll();
-            _hasAvtpFrame = false;
+            Volatile.Write(ref _hasAvtpFrame, false);
             _lastAvtpFrameUtc = DateTime.MinValue;
 
             // Default source label before first frame
@@ -2449,7 +2449,7 @@ namespace VideoStreamPlayer
 
             // Ensure we start from a clean reassembly state when replaying.
             _rvf.ResetAll();
-            _hasAvtpFrame = false;
+            Volatile.Write(ref _hasAvtpFrame, false);
             _lastAvtpFrameUtc = DateTime.MinValue;
 
             Volatile.Write(ref _activeAvtpFeed, (int)AvtpFeed.PcapReplay);
@@ -3151,7 +3151,7 @@ namespace VideoStreamPlayer
         private byte[] GetASourceBytes()
         {
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
-                return _hasAvtpFrame ? _avtpFrame : _idleGradientFrame;
+                return Volatile.Read(ref _hasAvtpFrame) ? _avtpFrame : _idleGradientFrame;
 
             return _lastLoaded switch
             {
@@ -3382,7 +3382,7 @@ namespace VideoStreamPlayer
             // last frame and fall back to the no-signal "Waiting for signal" UI.
             if (_isRunning
                 && _modeOfOperation == ModeOfOperation.AvtpLiveMonitor
-                && _hasAvtpFrame
+                && Volatile.Read(ref _hasAvtpFrame)
                 && _lastAvtpFrameUtc != DateTime.MinValue
                 && (DateTime.UtcNow - _lastAvtpFrameUtc) > LiveSignalLostTimeout)
             {
