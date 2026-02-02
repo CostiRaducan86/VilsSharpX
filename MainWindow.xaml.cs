@@ -99,6 +99,12 @@ namespace VideoStreamPlayer
         private readonly AviSourcePlayer _aviPlayer = new(W, H_ACTIVE, FpsEstimationWindowSec, FpsEmaAlpha);
         private readonly SourceLoaderHelper _sourceLoader = new(W, H_ACTIVE, H_LVDS);
 
+        // Frame snapshot/report saver
+        private readonly FrameSnapshotSaver _snapshotSaver = new(W, H_ACTIVE);
+
+        // Live NIC selector
+        private readonly LiveNicSelector _nicSelector = new();
+
         private Frame? _latestA;
         private Frame? _latestB;
         private Frame? _latestD;
@@ -130,8 +136,6 @@ namespace VideoStreamPlayer
         private readonly WriteableBitmap _wbA = BitmapUtils.MakeGray8(W, H_ACTIVE);
         private readonly WriteableBitmap _wbB = BitmapUtils.MakeGray8(W, H_ACTIVE);
         private readonly WriteableBitmap _wbD = BitmapUtils.MakeBgr24(W, H_ACTIVE);
-
-        private CancellationTokenSource? _saveFeedbackCts;
 
         // --- AVTP Transmitter (managed by AvtpTransmitManager) ---
         private readonly AvtpTransmitManager _txManager = new(W, H_ACTIVE, AppendUdpLog);
@@ -688,100 +692,20 @@ namespace VideoStreamPlayer
         private bool TrySetActiveAvtpFeed(LiveCaptureManager.Feed feed) => _liveCapture.TrySetActiveFeed(feed);
         private LiveCaptureManager.Feed GetActiveAvtpFeed() => _liveCapture.ActiveFeed;
 
-        private sealed class LiveNicItem
-        {
-            public required string Display;
-            public required string? DeviceName;
-            public override string ToString() => Display;
-        }
+        private void RefreshLiveNicList() => _nicSelector.RefreshNicList(CmbLiveNic, _avtpLiveDeviceHint);
 
-        private void RefreshLiveNicList()
-        {
-            if (CmbLiveNic == null) return;
+        private string? GetTxPcapDeviceNameOrNull() => _nicSelector.GetTxPcapDeviceNameOrNull(CmbLiveNic, _avtpLiveDeviceHint);
 
-            CmbLiveNic.Items.Clear();
-            CmbLiveNic.Items.Add(new LiveNicItem { Display = "<Auto>", DeviceName = null });
-
-            var devs = AvtpLiveCapture.ListDevicesSafe();
-            foreach (var d in devs)
-            {
-                string name = d.Name ?? string.Empty;
-                string desc = d.Description ?? string.Empty;
-                string display = NetworkInterfaceUtils.DescribeCaptureDeviceForUi(name, desc);
-                CmbLiveNic.Items.Add(new LiveNicItem { Display = display, DeviceName = name });
-            }
-
-            int idx = 0;
-            if (!string.IsNullOrWhiteSpace(_avtpLiveDeviceHint))
-            {
-                for (int i = 1; i < CmbLiveNic.Items.Count; i++)
-                {
-                    if (CmbLiveNic.Items[i] is LiveNicItem item
-                        && string.Equals(item.DeviceName, _avtpLiveDeviceHint, StringComparison.OrdinalIgnoreCase))
-                    {
-                        idx = i;
-                        break;
-                    }
-                }
-            }
-            CmbLiveNic.SelectedIndex = idx;
-        }
-
-        private string? GetTxPcapDeviceNameOrNull()
-        {
-            // 1) if the user explicitly selected from the combo (CmbLiveNic), use that NPF name
-            try
-            {
-                if (CmbLiveNic?.SelectedItem is LiveNicItem item && !string.IsNullOrWhiteSpace(item.DeviceName))
-                    return item.DeviceName;
-            }
-            catch { /* ignore */ }
-        
-            // 2) fallback: try to find by hint (description/MAC) in the pcap device list
-            string hint = _avtpLiveDeviceHint ?? string.Empty;
-        
-            try
-            {
-                var devs = CaptureDeviceList.Instance
-                    .OfType<SharpPcap.LibPcap.LibPcapLiveDevice>()
-                    .ToList();
-        
-                // a) match by hint in Name/Description
-                if (!string.IsNullOrWhiteSpace(hint))
-                {
-                    var hit = devs.FirstOrDefault(d =>
-                        (!string.IsNullOrWhiteSpace(d.Description) && d.Description.Contains(hint, StringComparison.OrdinalIgnoreCase)) ||
-                        (!string.IsNullOrWhiteSpace(d.Name) && d.Name.Contains(hint, StringComparison.OrdinalIgnoreCase)));
-        
-                    if (hit != null) return hit.Name;
-                }
-        
-                // b) alternative fallback: first non-loopback card
-                var first = devs.FirstOrDefault(d => !NetworkInterfaceUtils.LooksLikeLoopbackDevice(d.Name, d.Description));
-                return first?.Name;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private void UpdateLiveUiEnabledState()
-        {
-            bool isLive = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
-            if (CmbLiveNic != null) CmbLiveNic.IsEnabled = isLive;
-        }
+        private void UpdateLiveUiEnabledState() =>
+            _nicSelector.UpdateLiveUiEnabledState(CmbLiveNic, _modeOfOperation == ModeOfOperation.AvtpLiveMonitor);
 
         private void BtnRefreshNics_Click(object sender, RoutedEventArgs e) => RefreshLiveNicList();
 
         private void CmbLiveNic_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_settingsManager.IsLoading) return;
-            if (CmbLiveNic?.SelectedItem is LiveNicItem item)
-            {
-                _avtpLiveDeviceHint = item.DeviceName;
-                SaveUiSettings();
-            }
+            _avtpLiveDeviceHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic);
+            SaveUiSettings();
         }
 
         private void BDelta_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -919,15 +843,7 @@ namespace VideoStreamPlayer
 
         private async void BtnSaveReport_Click(object sender, RoutedEventArgs e)
         {
-            // UI feedback (cancel any previous pending status transitions)
-            try { _saveFeedbackCts?.Cancel(); } catch { }
-            try { _saveFeedbackCts?.Dispose(); } catch { }
-            _saveFeedbackCts = new CancellationTokenSource();
-            var uiCt = _saveFeedbackCts.Token;
-
-            ShowSaveFeedback("Saving current frame...", Brushes.DimGray);
-
-            // Save a compare report for the CURRENTLY DISPLAYED frame (works best while paused + stepping).
+            // Get current frames
             Frame? a;
             Frame? b;
             lock (_frameLock)
@@ -956,60 +872,10 @@ namespace VideoStreamPlayer
 
             // Match Record behavior: apply B post-processing before generating diff/report.
             var bPost = ApplyBPostProcessing(a, b);
-
             int frameNr = GetCurrentFrameNumberHint();
-            string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            string outDir = RecordingManager.GetFrameSnapshotsOutputDirectory();
 
-            var paths = RecordingManager.MakeUniqueSaveSetPaths(outDir, ts);
-
-            try
-            {
-                LblStatus.Text = $"Saving report + images… ({System.IO.Path.GetFileName(paths.XlsxPath)})";
-
-                var aBytes = (byte[])a.Data.Clone();
-                var bBytes = (byte[])bPost.Data.Clone();
-                byte thr = _diffThreshold;
-
-                // Create the D snapshot exactly like the UI render (B−A mapping to BGR24).
-                var dBgr = new byte[W * H_ACTIVE * 3];
-                DiffRenderer.RenderCompareToBgr(dBgr, aBytes, bBytes, W, H_ACTIVE, thr, _zeroZeroIsWhite,
-                    out _, out _, out _,
-                    out _, out _, out _,
-                    out _);
-
-                await Task.Run(() =>
-                {
-                    AviTripletRecorder.SaveSingleFrameCompareXlsx(paths.XlsxPath, frameNr, aBytes, bBytes, W, H_ACTIVE, deviationThreshold: thr);
-
-                    // Save 1:1 snapshots for all panes.
-                    ImageUtils.SaveGray8Png(paths.APath, aBytes, W, H_ACTIVE);
-                    ImageUtils.SaveGray8Png(paths.BPath, bBytes, W, H_ACTIVE);
-                    ImageUtils.SaveBgr24Png(paths.DPath, dBgr, W, H_ACTIVE);
-                });
-
-                // Keep the "Saving..." message visible for a short moment, then switch to "Saved!".
-                try { await Task.Delay(1200, uiCt); } catch { /* ignore */ }
-
-                if (!uiCt.IsCancellationRequested)
-                    ShowSaveFeedback("Current frame saved!", Brushes.ForestGreen);
-
-                // Optionally clear after a few seconds.
-                try { await Task.Delay(2500, uiCt); } catch { /* ignore */ }
-                if (!uiCt.IsCancellationRequested) HideSaveFeedback();
-
-                LblStatus.Text = $"Saved: {paths.XlsxPath} (+ A/B/D PNG)";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to save XLSX: {ex.Message}", "Save report error");
-
-                if (!uiCt.IsCancellationRequested)
-                    ShowSaveFeedback("Save failed.", Brushes.IndianRed);
-
-                try { await Task.Delay(3000, uiCt); } catch { /* ignore */ }
-                if (!uiCt.IsCancellationRequested) HideSaveFeedback();
-            }
+            await _snapshotSaver.SaveAsync(a, bPost, _diffThreshold, _zeroZeroIsWhite, frameNr,
+                LblSaveFeedback, LblStatus, ShowSaveFeedback, HideSaveFeedback);
         }
 
         private void BtnOpenSnapshots_Click(object sender, RoutedEventArgs e)
@@ -1315,9 +1181,7 @@ namespace VideoStreamPlayer
                 if (_avtpLiveEnabled)
                 {
                     // Ensure we use the NIC currently selected in the UI (avoids slow/incorrect auto-pick).
-                    string? deviceHint = _avtpLiveDeviceHint;
-                    if (CmbLiveNic?.SelectedItem is LiveNicItem sel && !string.IsNullOrWhiteSpace(sel.DeviceName))
-                        deviceHint = sel.DeviceName;
+                    string? deviceHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
 
                     // Persist the final hint so next Start uses the same interface.
                     _avtpLiveDeviceHint = deviceHint;
