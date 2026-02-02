@@ -70,9 +70,6 @@ namespace VideoStreamPlayer
 
         private volatile bool _zeroZeroIsWhite = false;
 
-        private bool _isLoadingSettings;
-        private readonly string _settingsPath = AppSettingsStore.GetSettingsPath();
-
         // Live AVTP capture settings (Ethernet via SharpPcap)
         private bool _avtpLiveEnabled = true;
         private string? _avtpLiveDeviceHint;
@@ -112,13 +109,14 @@ namespace VideoStreamPlayer
 
         private readonly object _frameLock = new();
 
-        // Zoom/pan (per pane)
-        private readonly ScaleTransform _zoomA = new(1.0, 1.0);
-        private readonly TranslateTransform _panA = new(0.0, 0.0);
-        private readonly ScaleTransform _zoomB = new(1.0, 1.0);
-        private readonly TranslateTransform _panB = new(0.0, 0.0);
-        private readonly ScaleTransform _zoomD = new(1.0, 1.0);
-        private readonly TranslateTransform _panD = new(0.0, 0.0);
+        // Zoom/pan manager (replaces individual _zoom/_pan fields)
+        private readonly ZoomPanManager _zoomPan = new();
+
+        // Pixel inspector for hover info
+        private readonly PixelInspector _pixelInspector = new(W, H_ACTIVE);
+
+        // UI settings manager
+        private readonly UiSettingsManager _settingsManager = new(W, H_ACTIVE);
 
         private readonly DispatcherTimer _overlayTimerA;
         private readonly DispatcherTimer _overlayTimerB;
@@ -131,12 +129,6 @@ namespace VideoStreamPlayer
         private int _overlayStepA;
         private int _overlayStepB;
         private int _overlayStepD;
-
-        private bool _isPanning;
-        private Pane _panningPane;
-        private Point _panStart;
-        private double _panStartX;
-        private double _panStartY;
 
         private readonly WriteableBitmap _wbA = BitmapUtils.MakeGray8(W, H_ACTIVE);
         private readonly WriteableBitmap _wbB = BitmapUtils.MakeGray8(W, H_ACTIVE);
@@ -174,12 +166,12 @@ namespace VideoStreamPlayer
 
             // XAML can trigger SelectionChanged/TextChanged during InitializeComponent.
             // Treat that phase like settings-load to avoid running app logic before controls/bitmaps are wired.
-            _isLoadingSettings = true;
+            _settingsManager.IsLoading = true;
             InitializeComponent();
             ImgA.Source = _wbA;
             ImgB.Source = _wbB;
             ImgD.Source = _wbD;
-            AttachZoomPanTransforms();
+            _zoomPan.AttachToImages(ImgA, ImgB, ImgD);
             _overlayTimerA = MakeOverlayTimer(Pane.A);
             _overlayTimerB = MakeOverlayTimer(Pane.B);
             _overlayTimerD = MakeOverlayTimer(Pane.D);
@@ -199,7 +191,7 @@ namespace VideoStreamPlayer
 
             if (LblDiffThr != null) LblDiffThr.Text = "0";
 
-            _isLoadingSettings = false;
+            _settingsManager.IsLoading = false;
         }
 
         private bool ShouldShowNoSignalWhileRunning()
@@ -329,19 +321,6 @@ namespace VideoStreamPlayer
             }
         }
 
-        private void AttachZoomPanTransforms()
-        {
-            var tgA = new TransformGroup { Children = new TransformCollection { _zoomA, _panA } };
-            var tgB = new TransformGroup { Children = new TransformCollection { _zoomB, _panB } };
-            var tgD = new TransformGroup { Children = new TransformCollection { _zoomD, _panD } };
-
-            ImgA.RenderTransform = tgA;
-            ImgB.RenderTransform = tgB;
-            ImgD.RenderTransform = tgD;
-
-            // Overlay is rendered in screen space (no transform) and we compute positions using zoom/pan.
-        }
-
         private void Img_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (!_playback.IsPaused) return;
@@ -371,11 +350,12 @@ namespace VideoStreamPlayer
 
         private (System.Windows.Controls.Image img, System.Windows.Controls.Canvas ovr, ScaleTransform zoom) GetPaneVisuals(Pane pane)
         {
+            int idx = (int)pane;
             return pane switch
             {
-                Pane.A => (ImgA, OvrA, _zoomA),
-                Pane.B => (ImgB, OvrB, _zoomB),
-                _ => (ImgD, OvrD, _zoomD),
+                Pane.A => (ImgA, OvrA, _zoomPan.GetZoom(0)),
+                Pane.B => (ImgB, OvrB, _zoomPan.GetZoom(1)),
+                _ => (ImgD, OvrD, _zoomPan.GetZoom(2)),
             };
         }
 
@@ -681,14 +661,9 @@ namespace VideoStreamPlayer
 
         private void LoadUiSettings()
         {
-            _isLoadingSettings = true;
+            var s = _settingsManager.Load();
             try
             {
-                var s = AppSettingsStore.LoadOrDefault(_settingsPath);
-                s.Fps = Math.Clamp(s.Fps, 1, 1000);
-                s.BDelta = Math.Clamp(s.BDelta, -255, 255);
-                s.Deadband = Math.Clamp(s.Deadband, 0, 255);
-                s.ForcedDeadPixelId = Math.Clamp(s.ForcedDeadPixelId, 0, W * H_ACTIVE);
 
                 _bValueDelta = s.BDelta;
                 _diffThreshold = (byte)s.Deadband;
@@ -723,39 +698,23 @@ namespace VideoStreamPlayer
             }
             finally
             {
-                _isLoadingSettings = false;
+                _settingsManager.FinishLoading();
             }
         }
 
         private void SaveUiSettings()
         {
-            if (_isLoadingSettings) return;
-            try
-            {
-                var s = new AppSettings
-                {
-                    Fps = (TxtFps != null && int.TryParse(TxtFps.Text, out var fps) && fps > 0) ? fps : 100,
-                    BDelta = _bValueDelta,
-                    Deadband = _diffThreshold,
-                    ZeroZeroIsWhite = _zeroZeroIsWhite,
-                    ForcedDeadPixelId = Volatile.Read(ref _forcedDeadPixelId),
-                    DarkPixelCompensationEnabled = _darkPixelCompensationEnabled,
-                    AvtpLiveEnabled = _avtpLiveEnabled,
-                    AvtpLiveDeviceHint = _avtpLiveDeviceHint,
-                    AvtpLiveUdpEnabled = _avtpLiveUdpEnabled,
-                    ModeOfOperation = (int)_modeOfOperation
-                };
-                AppSettingsStore.Save(s, _settingsPath);
-            }
-            catch
-            {
-                // ignore settings I/O errors
-            }
+            int fps = (TxtFps != null && int.TryParse(TxtFps.Text, out var f) && f > 0) ? f : 100;
+            var s = UiSettingsManager.CreateFromState(
+                fps, _bValueDelta, _diffThreshold, _zeroZeroIsWhite,
+                Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
+                _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation);
+            _settingsManager.TrySave(s);
         }
 
         private void CmbModeOfOperation_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (_isLoadingSettings || !IsLoaded) return;
+            if (_settingsManager.IsLoading || !IsLoaded) return;
 
             var newMode = (CmbModeOfOperation?.SelectedIndex ?? 0) == 0
                 ? ModeOfOperation.AvtpLiveMonitor
@@ -870,7 +829,7 @@ namespace VideoStreamPlayer
 
         private void CmbLiveNic_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (_isLoadingSettings) return;
+            if (_settingsManager.IsLoading) return;
             if (CmbLiveNic?.SelectedItem is LiveNicItem item)
             {
                 _avtpLiveDeviceHint = item.DeviceName;
@@ -2050,56 +2009,24 @@ namespace VideoStreamPlayer
             return Pane.A;
         }
 
-        private (ScaleTransform zoom, TranslateTransform pan) GetPaneTransforms(Pane pane) => pane switch
-        {
-            Pane.A => (_zoomA, _panA),
-            Pane.B => (_zoomB, _panB),
-            _ => (_zoomD, _panD),
-        };
+        private (ScaleTransform zoom, TranslateTransform pan) GetPaneTransforms(Pane pane) => 
+            _zoomPan.GetTransforms((int)pane);
 
-        private void ResetZoomPan(Pane pane)
-        {
-            var (zoom, pan) = GetPaneTransforms(pane);
-            zoom.ScaleX = zoom.ScaleY = 1.0;
-            pan.X = pan.Y = 0.0;
-        }
+        private void ResetZoomPan(Pane pane) => _zoomPan.Reset((int)pane);
 
         private void Img_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
             if (sender is not System.Windows.Controls.Image img) return;
 
             var pane = PaneFromSender(sender);
-            var (zoom, pan) = GetPaneTransforms(pane);
+            var parent = img.Parent as IInputElement ?? img;
 
-            double oldScale = zoom.ScaleX;
-            double factor = e.Delta > 0 ? 1.15 : (1.0 / 1.15);
-            double newScale = Math.Clamp(oldScale * factor, 1.0, 40.0);
-            if (Math.Abs(newScale - oldScale) < 1e-9) return;
-
-            // Zoom around mouse: compute anchor in parent coords, convert to local via inverse transform,
-            // then update pan so that the same local point stays under the cursor.
-            var parent = img.Parent as IInputElement;
-            Point pParent = parent != null ? e.GetPosition(parent) : e.GetPosition(img);
-
-            double localX = (pParent.X - pan.X) / oldScale;
-            double localY = (pParent.Y - pan.Y) / oldScale;
-
-            pan.X = pParent.X - (localX * newScale);
-            pan.Y = pParent.Y - (localY * newScale);
-            zoom.ScaleX = zoom.ScaleY = newScale;
-
-            // If zoom reset back to 1, also reset pan.
-            if (Math.Abs(newScale - 1.0) < 1e-6)
+            if (_zoomPan.HandleMouseWheel((int)pane, e, parent))
             {
-                pan.X = pan.Y = 0.0;
+                e.Handled = true;
+                if (_playback.IsPaused)
+                    RequestOverlayUpdate(pane);
             }
-
-            e.Handled = true;
-
-            // Overlay positions depend on zoom/pan (screen-space overlay), so update on zoom.
-            if (_playback.IsPaused)
-                RequestOverlayUpdate(pane);
         }
 
         private void Img_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -2107,71 +2034,49 @@ namespace VideoStreamPlayer
             if (sender is not System.Windows.Controls.Image img) return;
             var pane = PaneFromSender(sender);
 
-            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0 && e.ClickCount >= 2)
+            if (_zoomPan.StartPan((int)pane, e, this, img))
             {
-                ResetZoomPan(pane);
-                if (_playback.IsPaused) UpdateOverlay(pane);
                 e.Handled = true;
-                return;
+                if (e.ClickCount >= 2 && _playback.IsPaused)
+                    UpdateOverlay(pane);
             }
-
-            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
-
-            var (_, pan) = GetPaneTransforms(pane);
-            _isPanning = true;
-            _panningPane = pane;
-            _panStart = e.GetPosition(this);
-            _panStartX = pan.X;
-            _panStartY = pan.Y;
-            img.CaptureMouse();
-            e.Handled = true;
         }
 
         private void Img_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            if (!_isPanning) return;
-            _isPanning = false;
+            if (!_zoomPan.IsPanning) return;
             if (sender is System.Windows.Controls.Image img)
-                img.ReleaseMouseCapture();
+                _zoomPan.StopPan(img);
             e.Handled = true;
         }
 
         protected override void OnPreviewMouseMove(MouseEventArgs e)
         {
             base.OnPreviewMouseMove(e);
-            if (!_isPanning) return;
+            if (!_zoomPan.IsPanning) return;
 
-            var (_, pan) = GetPaneTransforms(_panningPane);
-            Point cur = e.GetPosition(this);
-            Vector d = cur - _panStart;
-            pan.X = _panStartX + d.X;
-            pan.Y = _panStartY + d.Y;
+            _zoomPan.UpdatePan(e, this);
 
             if (_playback.IsPaused)
-                RequestOverlayUpdate(_panningPane);
+                RequestOverlayUpdate((Pane)_zoomPan.PanningPaneIndex);
         }
 
         private void ShowPixelInfo(MouseEventArgs e, Frame? f, System.Windows.Controls.TextBlock lbl)
         {
-            // Do not show pixel info when signal is not available (idle/no-signal UI).
             if (_playback.Cts == null || ShouldShowNoSignalWhileRunning()) { lbl.Text = ""; return; }
             if (f == null) { lbl.Text = ""; return; }
             if (!TryGetPixelXYFromMouse(e, f, out int x, out int y)) { lbl.Text = ""; return; }
 
             byte v = f.Data[y * f.Stride + x];
-            int pixelId = (y * f.Width) + x + 1;
-            lbl.Text = $"x={x} y={y} v={v} pixel_ID={pixelId}";
+            lbl.Text = PixelInspector.FormatGrayscaleInfo(x, y, v, f.Width);
         }
 
         private void ShowPixelInfoDiff(MouseEventArgs e, System.Windows.Controls.TextBlock lbl)
         {
-            // Pane D displays deviation in BGR derived from A vs post-processed B.
-            // For hover, show signed diff (B−A) plus A/B values at that pixel.
-            // If signal not available (no-signal UI), don't show info.
             if (_playback.Cts == null || ShouldShowNoSignalWhileRunning()) { lbl.Text = ""; return; }
 
             var a = GetDisplayedFrameForPane(Pane.A);
-            var b = GetDisplayedFrameForPane(Pane.B); // includes post-processing
+            var b = GetDisplayedFrameForPane(Pane.B);
             var refFrame = a ?? b;
             if (refFrame == null) { lbl.Text = ""; return; }
 
@@ -2180,11 +2085,7 @@ namespace VideoStreamPlayer
             int idx = (y * refFrame.Stride) + x;
             byte av = (a != null && idx < a.Data.Length) ? a.Data[idx] : (byte)0;
             byte bv = (b != null && idx < b.Data.Length) ? b.Data[idx] : (byte)0;
-            int diff = bv - av;
-            int ad = diff < 0 ? -diff : diff;
-            int pixelId = (y * refFrame.Width) + x + 1;
-
-            lbl.Text = $"x={x} y={y} A={av} B={bv} diff(B−A)={diff} |diff|={ad} pixel_ID={pixelId}";
+            lbl.Text = PixelInspector.FormatDiffInfo(x, y, av, bv, refFrame.Width);
         }
 
         private bool TryGetPixelXYFromMouse(MouseEventArgs e, Frame f, out int x, out int y)
