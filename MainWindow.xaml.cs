@@ -120,10 +120,6 @@ namespace VideoStreamPlayer
         private readonly ScaleTransform _zoomD = new(1.0, 1.0);
         private readonly TranslateTransform _panD = new(0.0, 0.0);
 
-        private const double OverlayMinZoom = 8.0;
-        private const int OverlayMaxLabels = 40000;
-        private const double OverlayTextPx = 10.0; // on-screen size (Cassandra-like)
-
         private readonly DispatcherTimer _overlayTimerA;
         private readonly DispatcherTimer _overlayTimerB;
         private readonly DispatcherTimer _overlayTimerD;
@@ -148,59 +144,8 @@ namespace VideoStreamPlayer
 
         private CancellationTokenSource? _saveFeedbackCts;
 
-        // --- PlayerFromFiles: when STOP, keep AVTP alive by sending BLACK frames ---
-        private CancellationTokenSource? _txBlackCts;
-        private Task? _txBlackTask;
-        private static readonly byte[] _black320x80 = new byte[320 * 80];
-
-        private void StartBlackTxLoop(int fps)
-        {
-            StopBlackTxLoop();
-
-            if (_tx == null) return;
-            if (fps <= 0) fps = 100;
-
-            _txBlackCts = new CancellationTokenSource();
-            var ct = _txBlackCts.Token;
-
-            _txBlackTask = Task.Run(async () =>
-            {
-                var period = TimeSpan.FromMilliseconds(1000.0 / fps);
-
-                while (!ct.IsCancellationRequested)
-                {
-                    try
-                    {
-                        // Send one BLACK frame (20 packets) in the same AVTP format
-                        await _tx.SendFrame320x80Async(_black320x80, ct);
-                        await Task.Delay(period, ct);
-                    }
-                    catch (OperationCanceledException) { break; }
-                    catch (Exception ex)
-                    {
-                        AppendUdpLog($"[avtp-tx] BLACK loop error: {ex.GetType().Name}: {ex.Message}");
-                        break;
-                    }
-                }
-            }, ct);
-
-            AppendUdpLog($"[avtp-tx] BLACK loop started @ {fps} fps");
-        }
-
-        private void StopBlackTxLoop()
-        {
-            try
-            {
-                _txBlackCts?.Cancel();
-                _txBlackCts?.Dispose();
-            }
-            catch { }
-            finally
-            {
-                _txBlackCts = null;
-                _txBlackTask = null;
-            }
-        }
+        // --- AVTP Transmitter (managed by AvtpTransmitManager) ---
+        private readonly AvtpTransmitManager _txManager = new(W, H_ACTIVE, AppendUdpLog);
 
         private void ShowSaveFeedback(string message, Brush color)
         {
@@ -219,7 +164,8 @@ namespace VideoStreamPlayer
             }
         }
 
-        private AvtpRvfTransmitter? _tx;
+        // Overlay renderer
+        private readonly OverlayRenderer _overlayRenderer = new();
 
         public MainWindow()
         {
@@ -567,22 +513,12 @@ namespace VideoStreamPlayer
             }
         }
 
-        private static int ComputeOverlayStep(double scale, double zoomScale, int width, int height)
-        {
-            double pixelOnScreen = scale * zoomScale;
-            const double MinPixelForAll = 14.0;
-            int step = (int)Math.Max(1.0, Math.Ceiling(MinPixelForAll / Math.Max(1e-6, pixelOnScreen)));
-            while (((width + step - 1) / step) * ((height + step - 1) / step) > OverlayMaxLabels)
-                step++;
-            return step;
-        }
-
         private bool ShouldRegenerateOverlay(Pane pane)
         {
             if (!_playback.IsPaused) return false;
             var (img, ovr, zoom) = GetPaneVisuals(pane);
             if (img == null || ovr == null) return false;
-            if (zoom.ScaleX < OverlayMinZoom) return false;
+            if (zoom.ScaleX < OverlayRenderer.MinZoom) return false;
 
             // If overlay is hidden, we need to create it.
             if (ovr.Visibility != Visibility.Visible) return true;
@@ -607,7 +543,7 @@ namespace VideoStreamPlayer
             if (aw <= 1 || ah <= 1) return true;
 
             double scale = Math.Min(aw / fBase.Width, ah / fBase.Height);
-            int stepNow = ComputeOverlayStep(scale, zoom.ScaleX, fBase.Width, fBase.Height);
+            int stepNow = OverlayRenderer.ComputeStep(scale, zoom.ScaleX, fBase.Width, fBase.Height);
             int stepPrev = pane switch
             {
                 Pane.A => _overlayStepA,
@@ -622,7 +558,7 @@ namespace VideoStreamPlayer
             var (img, ovr, zoom) = GetPaneVisuals(pane);
             if (img == null || ovr == null) return;
 
-            if (!_playback.IsPaused || zoom.ScaleX < OverlayMinZoom)
+            if (!_playback.IsPaused || zoom.ScaleX < OverlayRenderer.MinZoom)
             {
                 ClearOverlay(pane);
                 return;
@@ -640,7 +576,6 @@ namespace VideoStreamPlayer
                 }
 
                 // D is rendered from A and *post-processed* B (forced dead pixel + optional dark pixel compensation).
-                // Keep overlay labels consistent with the actual rendered diff.
                 if (fA != null && fB != null)
                     fB = ApplyBPostProcessing(fA, fB);
                 fBase = fA;
@@ -664,225 +599,21 @@ namespace VideoStreamPlayer
                 return;
             }
 
-            // Stretch=Uniform => image may be letterboxed. Compute displayed rect.
-            double scale = Math.Min(aw / fBase.Width, ah / fBase.Height);
-            double dw = fBase.Width * scale;
-            double dh = fBase.Height * scale;
-            double ox = (aw - dw) / 2.0;
-            double oy = (ah - dh) / 2.0;
-
-            // Cassandra-like mode:
-            // - Fixed on-screen text size
-            // - Show only when it fits in ONE pixel (step=1)
-            // - Text is drawn in screen space and positioned using zoom/pan (no drift)
-            int step = 1;
-            double fontSize = Math.Max(1.0, OverlayTextPx); // constant on-screen size
-
-            // Pixel size on screen (DIPs)
-            double pixelOnScreen = scale * zoom.ScaleX;
-
-            // Map points from image local coords into overlay local coords.
-            // This automatically accounts for RenderTransform (zoom/pan) AND layout offsets
-            // (e.g., the header row above the image inside the parent Grid).
             GeneralTransform imgToOvr;
-            try
+            try { imgToOvr = img.TransformToVisual(ovr); }
+            catch { ClearOverlay(pane); return; }
+
+            var dpi = VisualTreeHelper.GetDpi(this);
+            double pixelsPerDip = dpi.PixelsPerDip;
+
+            if (pane == Pane.D && fA != null && fB != null)
             {
-                imgToOvr = img.TransformToVisual(ovr);
+                _overlayRenderer.RenderDiffOverlay(ovr, img, fA, fB, zoom.ScaleX, imgToOvr, pixelsPerDip, _diffThreshold, _zeroZeroIsWhite);
             }
-            catch
+            else
             {
-                ClearOverlay(pane);
-                return;
+                _overlayRenderer.RenderGrayscaleOverlay(ovr, img, fBase, zoom.ScaleX, imgToOvr, pixelsPerDip);
             }
-
-            ovr.Visibility = Visibility.Visible;
-            ovr.Children.Clear();
-
-            // Ensure the overlay surface uses the same coordinate space as the image cell.
-            ovr.Width = aw;
-            ovr.Height = ah;
-
-            // Render overlay as a single vector drawing for performance.
-            var dg = new DrawingGroup();
-            using (var dc = dg.Open())
-            {
-                var dpi = VisualTreeHelper.GetDpi(this);
-                double pixelsPerDip = dpi.PixelsPerDip;
-
-                var typeface = new Typeface(new FontFamily("Consolas"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
-                var fgWhite = new SolidColorBrush(Color.FromArgb(230, 255, 255, 255));
-                var fgBlack = new SolidColorBrush(Color.FromArgb(230, 0, 0, 0));
-                fgWhite.Freeze();
-                fgBlack.Freeze();
-
-                // Decide visibility based on whether the max-width label fits inside ONE pixel on-screen.
-                string sample = pane == Pane.D ? "+255" : "255";
-                var sampleFt = new FormattedText(sample, CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight, typeface, fontSize, fgWhite, pixelsPerDip);
-                double sampleW = Math.Max(sampleFt.WidthIncludingTrailingWhitespace, 1.0);
-                double sampleH = Math.Max(sampleFt.Height, 1.0);
-                const double FitMargin = 1.15;
-                if (pixelOnScreen < sampleW * FitMargin || pixelOnScreen < sampleH * FitMargin)
-                {
-                    // Too small -> hide entirely.
-                    ClearOverlay(pane);
-                    return;
-                }
-
-                static bool IsDarkBgr(byte bl, byte g, byte r)
-                {
-                    double y = (0.2126 * r) + (0.7152 * g) + (0.0722 * bl);
-                    return y < 128.0;
-                }
-
-                static bool IsDarkGray(byte v) => v < 128;
-
-                // Cache FormattedText for current font size to reduce allocations.
-                var cacheGrayW = new FormattedText[256];
-                var cacheGrayB = new FormattedText[256];
-                var cacheDiffW = new Dictionary<int, FormattedText>(512);
-                var cacheDiffB = new Dictionary<int, FormattedText>(512);
-
-                var boundsGrayW = new Rect[256];
-                var boundsGrayB = new Rect[256];
-                var boundsGrayWSet = new bool[256];
-                var boundsGrayBSet = new bool[256];
-                var boundsDiffW = new Dictionary<int, Rect>(512);
-                var boundsDiffB = new Dictionary<int, Rect>(512);
-
-                FormattedText GetGrayFt(byte v, bool white)
-                {
-                    var arr = white ? cacheGrayW : cacheGrayB;
-                    var ft = arr[v];
-                    if (ft != null) return ft;
-                    ft = new FormattedText(v.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
-                        FlowDirection.LeftToRight, typeface, fontSize, white ? fgWhite : fgBlack, pixelsPerDip);
-                    arr[v] = ft;
-                    return ft;
-                }
-
-                Rect GetGrayBounds(byte v, bool white)
-                {
-                    if (white)
-                    {
-                        if (!boundsGrayWSet[v])
-                        {
-                            boundsGrayW[v] = GetGrayFt(v, true).BuildGeometry(new Point(0, 0)).Bounds;
-                            boundsGrayWSet[v] = true;
-                        }
-                        return boundsGrayW[v];
-                    }
-
-                    if (!boundsGrayBSet[v])
-                    {
-                        boundsGrayB[v] = GetGrayFt(v, false).BuildGeometry(new Point(0, 0)).Bounds;
-                        boundsGrayBSet[v] = true;
-                    }
-                    return boundsGrayB[v];
-                }
-
-                FormattedText GetDiffFt(int diff, bool white)
-                {
-                    var dict = white ? cacheDiffW : cacheDiffB;
-                    if (dict.TryGetValue(diff, out var ft)) return ft;
-                    string text = diff.ToString("+0;-0;0", CultureInfo.InvariantCulture);
-                    ft = new FormattedText(text, CultureInfo.InvariantCulture,
-                        FlowDirection.LeftToRight, typeface, fontSize, white ? fgWhite : fgBlack, pixelsPerDip);
-                    dict[diff] = ft;
-                    return ft;
-                }
-
-                Rect GetDiffBounds(int diff, bool white)
-                {
-                    var dict = white ? boundsDiffW : boundsDiffB;
-                    if (!dict.TryGetValue(diff, out var b))
-                    {
-                        b = GetDiffFt(diff, white).BuildGeometry(new Point(0, 0)).Bounds;
-                        dict[diff] = b;
-                    }
-                    return b;
-                }
-
-                int added = 0;
-                for (int y = 0; y < fBase.Height; y += step)
-                {
-                    double imgCy = oy + (y + 0.5) * scale;
-                    for (int x = 0; x < fBase.Width; x += step)
-                    {
-                        double imgCx = ox + (x + 0.5) * scale;
-
-                        // Transform from image-local coords into overlay-local coords.
-                        Point p;
-                        try
-                        {
-                            p = imgToOvr.Transform(new Point(imgCx, imgCy));
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                        double cx = p.X;
-                        double cy = p.Y;
-
-                        FormattedText ft;
-                        Rect bounds;
-                        if (pane == Pane.D && fA != null && fB != null)
-                        {
-                            byte aPx = fA.Data[y * fA.Stride + x];
-                            byte bPx = fB.Data[y * fB.Stride + x];
-                            int diff = bPx - aPx;
-
-                            DiffRenderer.ComparePixelToBgr(aPx, bPx, _diffThreshold, _zeroZeroIsWhite, out var bl, out var gg, out var rr);
-                            bool white = IsDarkBgr(bl, gg, rr);
-                            ft = GetDiffFt(diff, white);
-                            bounds = GetDiffBounds(diff, white);
-                        }
-                        else
-                        {
-                            byte v = fBase.Data[y * fBase.Stride + x];
-                            bool white = IsDarkGray(v);
-                            ft = GetGrayFt(v, white);
-                            bounds = GetGrayBounds(v, white);
-                        }
-
-                        // Center based on actual glyph geometry bounds (fixes baseline/overhang bias).
-                        double oxText = cx - (bounds.X + (bounds.Width * 0.5));
-                        double oyText = cy - (bounds.Y + (bounds.Height * 0.5));
-                        dc.DrawText(ft, new Point(oxText, oyText));
-
-                        if (++added >= OverlayMaxLabels) break;
-                    }
-                    if (added >= OverlayMaxLabels) break;
-                }
-            }
-            dg.Freeze();
-
-            // Render via a DrawingBrush with an explicit absolute Viewbox/Viewport so the
-            // brush coordinate system is stable (0..aw, 0..ah) regardless of drawing bounds.
-            var db = new DrawingBrush(dg)
-            {
-                Stretch = Stretch.None,
-                AlignmentX = AlignmentX.Left,
-                AlignmentY = AlignmentY.Top,
-                TileMode = TileMode.None,
-                ViewboxUnits = BrushMappingMode.Absolute,
-                ViewportUnits = BrushMappingMode.Absolute,
-                Viewbox = new Rect(0, 0, aw, ah),
-                Viewport = new Rect(0, 0, aw, ah)
-            };
-            db.Freeze();
-
-            var rect = new Rectangle
-            {
-                Width = aw,
-                Height = ah,
-                Fill = db,
-                IsHitTestVisible = false,
-                SnapsToDevicePixels = true
-            };
-            System.Windows.Controls.Canvas.SetLeft(rect, 0);
-            System.Windows.Controls.Canvas.SetTop(rect, 0);
-            ovr.Children.Add(rect);
         }
 
         private void UpdateOverlaysAll()
@@ -1264,7 +995,7 @@ namespace VideoStreamPlayer
                 StopAll();
 
                 // Start BLACK TX loop (do NOT stop transmitter)
-                StartBlackTxLoop(fps);
+                _txManager.StartBlackLoop(fps);
 
                 LblStatus.Text = "Player STOP: sending BLACK AVTP (Signal not available).";
                 return;
@@ -1614,7 +1345,7 @@ namespace VideoStreamPlayer
 
         private void Start(int fps)
         {
-            StopBlackTxLoop();
+            _txManager.StopBlackLoop();
             // Safety: if already running, stop first
             if (_playback.Cts != null)
                 StopAll();
@@ -1647,27 +1378,9 @@ namespace VideoStreamPlayer
             // -------------------------------------------------
             // TX init (ONLY in Generator/Player mode)
             // -------------------------------------------------
-            try
+            if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
             {
-                if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
-                {
-                    var devName = _avtpLiveDeviceHint; // use exactly the device selected in the NIC dropdown
-                    if (!string.IsNullOrWhiteSpace(devName))
-                    {
-                        _tx = new AvtpRvfTransmitter(devName);
-                        AppendUdpLog($"[avtp-tx] TX ready on {devName}");
-                    }
-                    else
-                    {
-                        AppendUdpLog("[avtp-tx] TX disabled: no TX device selected/found.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                AppendUdpLog($"[avtp-tx] TX init ERROR: {ex.GetType().Name}: {ex.Message}");
-                try { _tx?.Dispose(); } catch { }
-                _tx = null;
+                _txManager.Initialize(_avtpLiveDeviceHint);
             }
 
             // -------------------------------------------------
@@ -2022,9 +1735,6 @@ namespace VideoStreamPlayer
             var sw = Stopwatch.StartNew();
             var next = sw.Elapsed;
         
-            int txErrOnce = 0;
-            int txNoDevOnce = 0;
-        
             while (!ct.IsCancellationRequested)
             {
                 try { _playback.PauseGate.Wait(ct); }
@@ -2050,26 +1760,11 @@ namespace VideoStreamPlayer
                 // -----------------------------
                 if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
                 {
-                    if (_tx != null)
+                    try
                     {
-                        try
-                        {
-                            // IMPORTANT: send frame "A" (320x80 Gray8)
-                            await _tx.SendFrame320x80Async(a.Data, ct);
-                        }
-                        catch (OperationCanceledException) { break; }
-                        catch (Exception ex)
-                        {
-                            // log only once to avoid spamming
-                            if (Interlocked.Exchange(ref txErrOnce, 1) == 0)
-                                AppendUdpLog($"[avtp-tx] SEND ERROR (first): {ex.GetType().Name}: {ex.Message}");
-                        }
+                        await _txManager.SendFrameAsync(a.Data, ct);
                     }
-                    else
-                    {
-                        if (Interlocked.Exchange(ref txNoDevOnce, 1) == 0)
-                            AppendUdpLog("[avtp-tx] TX is NULL -> nothing will be sent (select NIC and press Start).");
-                    }
+                    catch (OperationCanceledException) { break; }
                 }
         
                 // If pause was activated exactly during the iteration, do not publish frame
