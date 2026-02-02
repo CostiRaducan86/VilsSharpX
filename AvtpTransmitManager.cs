@@ -38,7 +38,7 @@ public sealed class AvtpTransmitManager : IDisposable
     /// Initializes the transmitter on the specified device.
     /// </summary>
     /// <returns>True if successful, false otherwise.</returns>
-    public bool Initialize(string? deviceName)
+    public bool Initialize(string? deviceName, string srcMac = "3C:CE:15:00:00:19", string dstMac = "01:00:5E:16:00:12")
     {
         Dispose();
 
@@ -50,8 +50,8 @@ public sealed class AvtpTransmitManager : IDisposable
 
         try
         {
-            _tx = new AvtpRvfTransmitter(deviceName);
-            _log($"[avtp-tx] TX ready on {deviceName}");
+            _tx = new AvtpRvfTransmitter(deviceName, srcMac, dstMac);
+            _log($"[avtp-tx] TX ready on {deviceName} (src={srcMac}, dst={dstMac})");
             _txErrOnce = 0;
             _txNoDevOnce = 0;
             return true;

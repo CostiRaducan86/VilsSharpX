@@ -2,11 +2,18 @@ using System;
 
 namespace VideoStreamPlayer
 {
+    /// <summary>
+    /// Utility class for building AVTP Ethernet frames.
+    /// NOTE: This class is NOT actively used - it exists for reference/testing only.
+    /// Production code uses AvtpRvfTransmitter which accepts configurable MAC addresses from the UI.
+    /// </summary>
     public static class AvtpPacketBuilder
     {
-        // Fixed MAC and IP for AVTP (as in WireShark capture)
+        // Reference MAC addresses (NOT used in production - see AvtpRvfTransmitter)
+        // Default Destination: 01:00:5E:16:00:12 (multicast)
+        // Default Source: 3C:CE:15:00:00:19
         public static readonly byte[] DestMac = { 0x01, 0x00, 0x5e, 0x16, 0x00, 0x12 };
-        public static readonly byte[] SrcMac = { 0x3c, 0xce, 0x15, 0x00, 0x19, 0x81 }; // Example, replace with your adapter's MAC
+        public static readonly byte[] SrcMac = { 0x3c, 0xce, 0x15, 0x00, 0x00, 0x19 };
         public const ushort EthTypeVlan = 0x8100;
         public const ushort EthTypeAvtp = 0x22f0;
         public const ushort VlanTag = 0x0005; // Priority 5, VLAN 0

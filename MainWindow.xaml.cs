@@ -75,6 +75,10 @@ namespace VideoStreamPlayer
         private string? _avtpLiveDeviceHint;
         private bool _avtpLiveUdpEnabled = true;
 
+        // AVTP TX MAC addresses
+        private string _srcMac = "3C:CE:15:00:00:19";
+        private string _dstMac = "01:00:5E:16:00:12";
+
         private ModeOfOperation _modeOfOperation = ModeOfOperation.AvtpLiveMonitor;
 
         // Fallback image / generator base
@@ -626,6 +630,9 @@ namespace VideoStreamPlayer
                 _avtpLiveDeviceHint = s.AvtpLiveDeviceHint;
                 _avtpLiveUdpEnabled = s.AvtpLiveUdpEnabled;
 
+                _srcMac = s.SrcMac ?? "3C:CE:15:00:00:19";
+                _dstMac = s.DstMac ?? "01:00:5E:16:00:12";
+
                 _modeOfOperation = s.ModeOfOperation == (int)ModeOfOperation.AvtpLiveMonitor
                     ? ModeOfOperation.AvtpLiveMonitor
                     : ModeOfOperation.PlayerFromFiles;
@@ -637,6 +644,8 @@ namespace VideoStreamPlayer
                 if (ChkZeroZeroWhite != null) ChkZeroZeroWhite.IsChecked = s.ZeroZeroIsWhite;
                 if (TxtDeadPixelId != null) TxtDeadPixelId.Text = s.ForcedDeadPixelId.ToString();
                 if (ChkDarkPixelComp != null) ChkDarkPixelComp.IsChecked = s.DarkPixelCompensationEnabled;
+                if (TxtSrcMac != null) TxtSrcMac.Text = _srcMac;
+                if (TxtDstMac != null) TxtDstMac.Text = _dstMac;
 
                 if (CmbModeOfOperation != null)
                 {
@@ -659,7 +668,8 @@ namespace VideoStreamPlayer
             var s = UiSettingsManager.CreateFromState(
                 fps, _bValueDelta, _diffThreshold, _zeroZeroIsWhite,
                 Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
-                _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation);
+                _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation,
+                _srcMac, _dstMac);
             _settingsManager.TrySave(s);
         }
 
@@ -768,6 +778,17 @@ namespace VideoStreamPlayer
             RenderAll();
         }
 
+        private void TxtMac_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading) return;
+
+            if (TxtSrcMac != null)
+                _srcMac = TxtSrcMac.Text?.Trim() ?? "3C:CE:15:00:00:19";
+            if (TxtDstMac != null)
+                _dstMac = TxtDstMac.Text?.Trim() ?? "01:00:5E:16:00:12";
+
+            SaveUiSettings();
+        }
         private void ShowIdleGradient()
         {
             // Replaced idle gradient with explicit "no signal" UI.
@@ -1133,7 +1154,7 @@ namespace VideoStreamPlayer
             // -------------------------------------------------
             if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
             {
-                _txManager.Initialize(_avtpLiveDeviceHint);
+                _txManager.Initialize(_avtpLiveDeviceHint, _srcMac, _dstMac);
             }
 
             // -------------------------------------------------

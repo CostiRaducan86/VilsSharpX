@@ -65,13 +65,8 @@ namespace VideoStreamPlayer
             _vlanTci = (ushort)(((vlanPriority & 0x7) << 13) | (vlanId & 0x0FFF));
             _etherType = etherType;
 
-            // Stream ID: 3C CE 15 00 00 19 00 50/51 (like CAPL)
-            _streamId[0] = 0x3C;
-            _streamId[1] = 0xCE;
-            _streamId[2] = 0x15;
-            _streamId[3] = 0x00;
-            _streamId[4] = 0x00;
-            _streamId[5] = 0x19;
+            // Stream ID: first 6 bytes from srcMac + 0x00 + streamIdLastByte (like CAPL)
+            Buffer.BlockCopy(_srcMac, 0, _streamId, 0, 6);
             _streamId[6] = 0x00;
             _streamId[7] = streamIdLastByte;
 

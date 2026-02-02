@@ -6,7 +6,7 @@ namespace VideoStreamPlayer;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsVersion = 4;
+    public const int CurrentSettingsVersion = 5;
 
     public int SettingsVersion { get; set; } = CurrentSettingsVersion;
 
@@ -31,6 +31,10 @@ public sealed class AppSettings
 
     // 0 = player (files/pcap/avi/scene), 1 = live AVTP monitor
     public int ModeOfOperation { get; set; } = 1;
+
+    // AVTP TX MAC addresses (format: "XX:XX:XX:XX:XX:XX")
+    public string SrcMac { get; set; } = "3C:CE:15:00:00:19";
+    public string DstMac { get; set; } = "01:00:5E:16:00:12";
 }
 
 public static class AppSettingsStore
@@ -74,6 +78,15 @@ public static class AppSettingsStore
             {
                 // Migration: CANoe gateway settings were removed.
                 settings.SettingsVersion = 4;
+                migrated = true;
+            }
+
+            if (settings.SettingsVersion < 5)
+            {
+                // Migration: add MAC address settings with defaults.
+                settings.SrcMac = "3C:CE:15:00:00:19";
+                settings.DstMac = "01:00:5E:16:00:12";
+                settings.SettingsVersion = 5;
                 migrated = true;
             }
 
