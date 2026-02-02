@@ -97,6 +97,7 @@ namespace VideoStreamPlayer
         private readonly SequencePlayer _sequencePlayer = new(W, H_ACTIVE);
         private readonly ScenePlayer _scenePlayer = new(W, H_ACTIVE);
         private readonly AviSourcePlayer _aviPlayer = new(W, H_ACTIVE, FpsEstimationWindowSec, FpsEmaAlpha);
+        private readonly SourceLoaderHelper _sourceLoader = new(W, H_ACTIVE, H_LVDS);
 
         private Frame? _latestA;
         private Frame? _latestB;
@@ -125,10 +126,6 @@ namespace VideoStreamPlayer
         private bool _overlayPendingA;
         private bool _overlayPendingB;
         private bool _overlayPendingD;
-
-        private int _overlayStepA;
-        private int _overlayStepB;
-        private int _overlayStepD;
 
         private readonly WriteableBitmap _wbA = BitmapUtils.MakeGray8(W, H_ACTIVE);
         private readonly WriteableBitmap _wbB = BitmapUtils.MakeGray8(W, H_ACTIVE);
@@ -176,22 +173,25 @@ namespace VideoStreamPlayer
             _overlayTimerB = MakeOverlayTimer(Pane.B);
             _overlayTimerD = MakeOverlayTimer(Pane.D);
 
-            // default pattern: horizontal gradient (fallback)
-            for (int y = 0; y < H_ACTIVE; y++)
-                for (int x = 0; x < W; x++)
-                    _idleGradientFrame[y * W + x] = (byte)(x * 255 / (W - 1));
-
-            // no-signal pattern: flat mid-gray
-            for (int i = 0; i < _noSignalGrayFrame.Length; i++)
-                _noSignalGrayFrame[i] = 0x80;
-            for (int i = 0; i < _noSignalGrayBgr.Length; i++)
-                _noSignalGrayBgr[i] = 0x80;
-
-            Buffer.BlockCopy(_idleGradientFrame, 0, _pgmFrame, 0, _pgmFrame.Length);
+            InitializeDefaultPatterns();
 
             if (LblDiffThr != null) LblDiffThr.Text = "0";
 
             _settingsManager.IsLoading = false;
+        }
+
+        private void InitializeDefaultPatterns()
+        {
+            // Horizontal gradient (fallback)
+            for (int y = 0; y < H_ACTIVE; y++)
+                for (int x = 0; x < W; x++)
+                    _idleGradientFrame[y * W + x] = (byte)(x * 255 / (W - 1));
+
+            // No-signal pattern: flat mid-gray
+            Array.Fill(_noSignalGrayFrame, (byte)0x80);
+            Array.Fill(_noSignalGrayBgr, (byte)0x80);
+
+            Buffer.BlockCopy(_idleGradientFrame, 0, _pgmFrame, 0, _pgmFrame.Length);
         }
 
         private bool ShouldShowNoSignalWhileRunning()
@@ -482,55 +482,7 @@ namespace VideoStreamPlayer
             var (_, ovr, _) = GetPaneVisuals(pane);
             ovr.Children.Clear();
             ovr.Visibility = Visibility.Collapsed;
-
             StopOverlayTimer(pane);
-
-            switch (pane)
-            {
-                case Pane.A: _overlayStepA = 0; break;
-                case Pane.B: _overlayStepB = 0; break;
-                default: _overlayStepD = 0; break;
-            }
-        }
-
-        private bool ShouldRegenerateOverlay(Pane pane)
-        {
-            if (!_playback.IsPaused) return false;
-            var (img, ovr, zoom) = GetPaneVisuals(pane);
-            if (img == null || ovr == null) return false;
-            if (zoom.ScaleX < OverlayRenderer.MinZoom) return false;
-
-            // If overlay is hidden, we need to create it.
-            if (ovr.Visibility != Visibility.Visible) return true;
-
-            Frame? fBase;
-            if (pane == Pane.D)
-            {
-                lock (_frameLock)
-                {
-                    // While paused, D must use the same frozen A/B snapshot used by render + hover.
-                    fBase = _pausedA ?? _latestA;
-                }
-            }
-            else
-            {
-                fBase = GetDisplayedFrameForPane(pane);
-            }
-            if (fBase == null) return true;
-
-            double aw = img.ActualWidth;
-            double ah = img.ActualHeight;
-            if (aw <= 1 || ah <= 1) return true;
-
-            double scale = Math.Min(aw / fBase.Width, ah / fBase.Height);
-            int stepNow = OverlayRenderer.ComputeStep(scale, zoom.ScaleX, fBase.Width, fBase.Height);
-            int stepPrev = pane switch
-            {
-                Pane.A => _overlayStepA,
-                Pane.B => _overlayStepB,
-                _ => _overlayStepD,
-            };
-            return stepNow != stepPrev;
         }
 
         private void UpdateOverlay(Pane pane)
@@ -606,49 +558,7 @@ namespace VideoStreamPlayer
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             // Hook LiveCaptureManager -> update UI with frame info (frame storage is already done in the manager)
-            _liveCapture.OnFrameReady += (frame, meta) =>
-            {
-                // Runs on receiver thread -> marshal to UI
-                Dispatcher.Invoke(() =>
-                {
-                    // Keep status stable when stopped; ignore late frames during shutdown races.
-                    if (!_playback.IsRunning)
-                        return;
-
-                    _playback.IncrementCountAvtpIn();
-
-                    bool incomplete = meta.linesWritten != H_ACTIVE;
-                    bool gap = meta.seqGaps > 0;
-                    if (incomplete) _playback.IncrementCountAvtpIncomplete();
-                    if (gap)
-                    {
-                        _playback.IncrementCountAvtpSeqGapFrames();
-                        _playback.AddSeqGaps(meta.seqGaps);
-                    }
-                    if (incomplete || gap) _playback.IncrementCountAvtpDropped();
-
-                    // Increment _countB for AVTP Live mode FPS tracking
-                    if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
-                    {
-                        _playback.IncrementCountB();
-                    }
-
-                    int lateSkip = _playback.CountLateFramesSkipped;
-                    string late = lateSkip > 0 ? $" | lateSkip={lateSkip}" : "";
-
-                    string src = GetActiveAvtpFeed() switch
-                    {
-                        LiveCaptureManager.Feed.UdpRvf => "UDP/RVFU",
-                        LiveCaptureManager.Feed.EthernetAvtp => "Ethernet/AVTP",
-                        LiveCaptureManager.Feed.PcapReplay => "PCAP",
-                        _ => "?"
-                    };
-
-                    _liveCapture.LastRvfSrcLabel = src;
-
-                    LblStatus.Text = $"AVTP RVF ({src}): frameId={meta.frameId} seq={meta.seq} lines={meta.linesWritten}/80 gaps={meta.seqGaps} | dropped={_playback.CountAvtpDropped} (gapFrames={_playback.CountAvtpSeqGapFrames}, incomplete={_playback.CountAvtpIncomplete}){late}";
-                });
-            };
+            _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
 
             ShowIdleGradient();
             LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
@@ -657,6 +567,43 @@ namespace VideoStreamPlayer
 
             // Startup should show "Signal not available".
             ApplyNoSignalUiState(noSignal: true);
+        }
+
+        private void HandleLiveFrameReady(FrameMeta meta)
+        {
+            // Keep status stable when stopped; ignore late frames during shutdown races.
+            if (!_playback.IsRunning)
+                return;
+
+            _playback.IncrementCountAvtpIn();
+
+            bool incomplete = meta.linesWritten != H_ACTIVE;
+            bool gap = meta.seqGaps > 0;
+            if (incomplete) _playback.IncrementCountAvtpIncomplete();
+            if (gap)
+            {
+                _playback.IncrementCountAvtpSeqGapFrames();
+                _playback.AddSeqGaps(meta.seqGaps);
+            }
+            if (incomplete || gap) _playback.IncrementCountAvtpDropped();
+
+            // Increment _countB for AVTP Live mode FPS tracking
+            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+                _playback.IncrementCountB();
+
+            string src = GetActiveAvtpFeed() switch
+            {
+                LiveCaptureManager.Feed.UdpRvf => "UDP/RVFU",
+                LiveCaptureManager.Feed.EthernetAvtp => "Ethernet/AVTP",
+                LiveCaptureManager.Feed.PcapReplay => "PCAP",
+                _ => "?"
+            };
+            _liveCapture.LastRvfSrcLabel = src;
+
+            LblStatus.Text = StatusFormatter.FormatAvtpRvfStatus(
+                src, meta.frameId, meta.seq, meta.linesWritten, meta.seqGaps,
+                _playback.CountAvtpDropped, _playback.CountAvtpSeqGapFrames,
+                _playback.CountAvtpIncomplete, _playback.CountLateFramesSkipped);
         }
 
         private void LoadUiSettings()
@@ -1171,26 +1118,20 @@ namespace VideoStreamPlayer
             }
 
             if (BtnStart != null) BtnStart.Content = "Pause";
+
+            double shownFps = GetShownFps(avtpInFps: _playback.AvtpInFpsEma);
+            bool isAviZero = _lastLoaded == LoadedSource.Avi && shownFps <= 0.0;
             if (LblRunInfoA != null)
-            {
-                double shownFps = GetShownFps(avtpInFps: _playback.AvtpInFpsEma);
-                LblRunInfoA.Text = shownFps > 0 ? $"Running @: {shownFps:F1} fps" : "Running";
-            }
+                LblRunInfoA.Text = StatusFormatter.FormatRunInfoA(true, false, shownFps, isAviZero);
             if (LblRunInfoB != null)
-            {
-                if (_playback.BFpsEma <= 0.0)
-                    LblRunInfoB.Text = "Running";
-                else
-                    LblRunInfoB.Text = $"Running @: {_playback.BFpsEma:F1} fps";
-            }
+                LblRunInfoB.Text = StatusFormatter.FormatRunInfoB(true, false, false, _playback.BFpsEma);
+
             LblStatus.Text = _playback.RunningStatusText ?? "Running.";
 
             ClearOverlay(Pane.A);
             ClearOverlay(Pane.B);
             ClearOverlay(Pane.D);
         }
-
-        private void BtnLoad_Click(object sender, RoutedEventArgs e) => BtnLoadFiles_Click(sender, e);
 
         private void BtnLoadFiles_Click(object sender, RoutedEventArgs e)
         {
@@ -1244,57 +1185,44 @@ namespace VideoStreamPlayer
 
         private void LoadPcapPath(string path)
         {
-            ClearAvi();
-            _playback.ResetFpsEstimates();
+            PrepareForNewSource(clearAvtpFrame: false);
             _lastLoaded = LoadedSource.Pcap;
             _lastLoadedPcapPath = path;
-            _scenePlayer.Clear();
-            LblStatus.Text = "PCAP loaded. Press Start to begin replay.";
+            LblStatus.Text = SourceLoaderHelper.GetPcapStatusMessage();
         }
 
         private void LoadSingleImage(string path)
         {
-            ClearAvi();
-            _playback.ResetFpsEstimates();
-            // Switching sources: drop any previously replayed/received AVTP frame
-            _liveCapture.ClearAvtpFrame();
+            PrepareForNewSource(clearAvtpFrame: true);
 
-            (int width, int height, byte[] data) img = ImageUtils.LoadImageAsGray8(path);
-
-            if (img.width < W || img.height < H_ACTIVE)
-                throw new InvalidOperationException($"Expected at least {W}x{H_ACTIVE}, got {img.width}x{img.height}.");
-
-            // Always crop A to 320x80 from top-left (x=0,y=0)
-            _pgmFrame = ImageUtils.CropTopLeftGray8(img.data, img.width, img.height, W, H_ACTIVE);
-
-            // Keep an optional 320x84 buffer (also top-left) for future LVDS usage.
-            _lvdsFrame84 = img.height >= H_LVDS ? ImageUtils.CropTopLeftGray8(img.data, img.width, img.height, W, H_LVDS) : null;
+            var result = _sourceLoader.LoadImage(path);
+            _pgmFrame = result.Frame;
+            _lvdsFrame84 = result.LvdsFrame;
 
             _lastLoaded = LoadedSource.Image;
-            _lastLoadedPcapPath = null;
-            _scenePlayer.Clear();
-
-            LblStatus.Text = "Image loaded (PGM Gray8 or BMP/PNG→Gray8 u8). Press Start to begin rendering.";
+            LblStatus.Text = result.StatusMessage;
 
             if (_playback.Cts == null || _playback.IsPaused) RenderOneFrameNow();
         }
 
         private void LoadAvi(string path)
         {
-            ClearAvi();
-
-            // Switching sources: stop using previously replayed/received AVTP frame
-            _liveCapture.ClearAvtpFrame();
-
+            PrepareForNewSource(clearAvtpFrame: true);
             _aviPlayer.Load(path);
-
             _lastLoaded = LoadedSource.Avi;
-            _lastLoadedPcapPath = null;
-            _scenePlayer.Clear();
-
             LblStatus.Text = _aviPlayer.BuildStatusMessage();
 
             if (_playback.Cts == null || _playback.IsPaused) RenderOneFrameNow();
+        }
+
+        private void PrepareForNewSource(bool clearAvtpFrame)
+        {
+            ClearAvi();
+            _playback.ResetFpsEstimates();
+            _scenePlayer.Clear();
+            _lastLoadedPcapPath = null;
+            if (clearAvtpFrame)
+                _liveCapture.ClearAvtpFrame();
         }
 
         private void ClearAvi()
@@ -1351,7 +1279,7 @@ namespace VideoStreamPlayer
                 _ = Task.Run(() => GeneratorLoopAsync(fps, ct));
                 _ = Task.Run(() => UiRefreshLoop(ct));
 
-                LblStatus.Text = $"Running Player @ {fps} fps (AVTP TX enabled)";
+                LblStatus.Text = StatusFormatter.FormatPlayerRunning(fps, avtpEnabled: true);
             }
             else
             {
@@ -1359,10 +1287,7 @@ namespace VideoStreamPlayer
                 _ = Task.Run(() => UiRefreshLoop(ct));
 
                 // Until the first frame arrives, show explicit waiting message.
-                LblStatus.Text =
-                    $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
-                    (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
-                    $". (log: {GetUdpLogPath()})";
+                LblStatus.Text = StatusFormatter.FormatWaitingForSignal(_avtpLiveUdpEnabled, RvfProtocol.DefaultPort, GetUdpLogPath());
 
                 _playback.WasWaitingForSignal = true;
             }
@@ -1476,7 +1401,7 @@ namespace VideoStreamPlayer
 
             SaveUiSettings();
 
-            LblStatus.Text = $"AVTP RVF ({_liveCapture.LastRvfSrcLabel}): Stopped.";
+            LblStatus.Text = StatusFormatter.FormatStoppedStatus(_liveCapture.LastRvfSrcLabel);
 
             ClearOverlay(Pane.A);
             ClearOverlay(Pane.B);
@@ -1485,27 +1410,6 @@ namespace VideoStreamPlayer
 
         private static void AppendUdpLog(string message) => DiagnosticLogger.Log(message);
         private static string GetUdpLogPath() => DiagnosticLogger.LogPath;
-
-        private async void BtnPlayPcap_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new Microsoft.Win32.OpenFileDialog
-            {
-                Title = "Select PCAP/PCAPNG",
-                Filter = "Capture files (*.pcap;*.pcapng)|*.pcap;*.pcapng|All files (*.*)|*.*",
-                CheckFileExists = true,
-                Multiselect = false
-            };
-
-            if (dlg.ShowDialog(this) != true)
-                return;
-
-            _lastLoaded = LoadedSource.Pcap;
-            _lastLoadedPcapPath = dlg.FileName;
-            LblStatus.Text = "PCAP loaded. Press Start to begin replay.";
-
-            // Keep signature async for WPF handler; no await needed anymore.
-            await Task.CompletedTask;
-        }
 
         private void BtnLoadSeqA_Click(object sender, RoutedEventArgs e) => LoadSequenceImage(isA: true);
         private void BtnLoadSeqB_Click(object sender, RoutedEventArgs e) => LoadSequenceImage(isA: false);
@@ -1624,14 +1528,11 @@ namespace VideoStreamPlayer
         {
             ClearAvi();
             _playback.ResetFpsEstimates();
-
-            // Switching sources: stop using previously replayed/received AVTP frame
             _liveCapture.ClearAvtpFrame();
+            _lastLoadedPcapPath = null;
 
             _scenePlayer.Load(scenePath);
-
             _lastLoaded = LoadedSource.Scene;
-            _lastLoadedPcapPath = null;
 
             LblStatus.Text = _scenePlayer.BuildStatusMessage();
             if (_playback.Cts == null || _playback.IsPaused) RenderOneFrameNow();
@@ -1818,10 +1719,7 @@ namespace VideoStreamPlayer
 
                 if (!_playback.WasWaitingForSignal && LblStatus != null)
                 {
-                    LblStatus.Text =
-                        $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort" +
-                        (_avtpLiveUdpEnabled ? $"; UDP/RVFU on 0.0.0.0:{RvfProtocol.DefaultPort}" : "") +
-                        $". (log: {GetUdpLogPath()})";
+                    LblStatus.Text = StatusFormatter.FormatWaitingForSignal(_avtpLiveUdpEnabled, RvfProtocol.DefaultPort, GetUdpLogPath());
                     _playback.RunningStatusText = LblStatus.Text;
                 }
                 _playback.WasWaitingForSignal = true;
@@ -1880,7 +1778,7 @@ namespace VideoStreamPlayer
             }
 
             if (LblDiffStats != null)
-                LblDiffStats.Text = $"COMPARE (B−A): max_positive_dev={Math.Max(0, maxDiff)}  max_negative_dev={Math.Min(0, minDiff)}  total_pixels_dev={aboveDeadband}  total_dark_pixels={totalDarkPixels}";
+                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, aboveDeadband, totalDarkPixels);
 
             ApplyNoSignalUiState(noSignal: false);
             UpdateFpsLabels();
@@ -1891,81 +1789,30 @@ namespace VideoStreamPlayer
             if (!_playback.TryUpdateFpsEstimates(out double fpsA, out double fpsB, out double fpsIn))
                 return;
 
-            bool noSignalWhileRunning = ShouldShowNoSignalWhileRunning();
+            bool noSignal = ShouldShowNoSignalWhileRunning();
+            bool isRunning = _playback.Cts != null;
+            bool isPaused = _playback.IsPaused;
 
-            // Note: LblA/LblB/LblD are reserved for cursor x/y/v info.
-            string avtpDrop = $"{_playback.CountAvtpDropped} (gapFrames={_playback.CountAvtpSeqGapFrames}, incomplete={_playback.CountAvtpIncomplete}, gaps={_playback.SumAvtpSeqGaps})";
-
-            // Keep these updated for potential future use (row is hidden in XAML).
-            if (LblAvtpInFps != null) LblAvtpInFps.Text = $"{_playback.AvtpInFpsEma:F1} fps";
-            if (LblAvtpDropped != null) LblAvtpDropped.Text = avtpDrop;
+            if (LblAvtpInFps != null) 
+                LblAvtpInFps.Text = $"{_playback.AvtpInFpsEma:F1} fps";
+            if (LblAvtpDropped != null) 
+                LblAvtpDropped.Text = StatusFormatter.FormatAvtpDropped(
+                    _playback.CountAvtpDropped, _playback.CountAvtpSeqGapFrames, 
+                    _playback.CountAvtpIncomplete, _playback.SumAvtpSeqGaps);
 
             if (LblRunInfoA != null)
             {
-                if (_playback.Cts != null)
-                {
-                    if (_playback.IsPaused)
-                    {
-                        LblRunInfoA.Text = "Paused";
-                    }
-                    else
-                    {
-                        double shownFps = noSignalWhileRunning ? 0.0 : GetShownFps(avtpInFps: _playback.AvtpInFpsEma);
-                        if (_lastLoaded == LoadedSource.Avi && shownFps <= 0.0)
-                            LblRunInfoA.Text = "Running";
-                        else
-                            LblRunInfoA.Text = $"Running @: {shownFps:F1} fps";
+                double shownFps = noSignal ? 0.0 : GetShownFps(_playback.AvtpInFpsEma);
+                bool isAviZero = _lastLoaded == LoadedSource.Avi && shownFps <= 0.0;
+                LblRunInfoA.Text = StatusFormatter.FormatRunInfoA(isRunning, isPaused, shownFps, isAviZero);
 
-                        // Only when >0, keep a visible hint in the status line too.
-                        int lateSkip = _playback.CountLateFramesSkipped;
-                        if (lateSkip > 0 && LblStatus != null)
-                        {
-                            const string tag = "lateSkip=";
-                            string s = LblStatus.Text ?? string.Empty;
-                            int idx = s.IndexOf(tag, StringComparison.Ordinal);
-                            if (idx >= 0)
-                            {
-                                int start = idx + tag.Length;
-                                int end = start;
-                                while (end < s.Length && char.IsDigit(s[end])) end++;
-                                LblStatus.Text = s.Substring(0, start)
-                                               + lateSkip.ToString(CultureInfo.InvariantCulture)
-                                               + s.Substring(end);
-                            }
-                            else
-                            {
-                                LblStatus.Text = string.IsNullOrWhiteSpace(s)
-                                    ? $"lateSkip={lateSkip}"
-                                    : $"{s} | lateSkip={lateSkip}";
-                            }
-                        }
-                    }
-                }
-                else LblRunInfoA.Text = "";
+                // Update lateSkip in status
+                if (isRunning && !isPaused && _playback.CountLateFramesSkipped > 0 && LblStatus != null)
+                    LblStatus.Text = StatusFormatter.UpdateLateSkipInStatus(LblStatus.Text ?? "", _playback.CountLateFramesSkipped);
             }
 
             if (LblRunInfoB != null)
-            {
-                if (_playback.Cts != null)
-                {
-                    if (_playback.IsPaused)
-                    {
-                        LblRunInfoB.Text = "Paused";
-                    }
-                    else
-                    {
-                        if (noSignalWhileRunning)
-                        {
-                            LblRunInfoB.Text = $"Running @: {0.0:F1} fps";
-                        }
-                        else if (_playback.BFpsEma <= 0.0)
-                            LblRunInfoB.Text = "Running";
-                        else
-                            LblRunInfoB.Text = $"Running @: {_playback.BFpsEma:F1} fps";
-                    }
-                }
-                else LblRunInfoB.Text = "";
-            }
+                LblRunInfoB.Text = StatusFormatter.FormatRunInfoB(isRunning, isPaused, noSignal, _playback.BFpsEma);
         }
 
         private double GetShownFps(double avtpInFps)
@@ -2008,11 +1855,6 @@ namespace VideoStreamPlayer
             }
             return Pane.A;
         }
-
-        private (ScaleTransform zoom, TranslateTransform pan) GetPaneTransforms(Pane pane) => 
-            _zoomPan.GetTransforms((int)pane);
-
-        private void ResetZoomPan(Pane pane) => _zoomPan.Reset((int)pane);
 
         private void Img_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -2065,7 +1907,13 @@ namespace VideoStreamPlayer
         {
             if (_playback.Cts == null || ShouldShowNoSignalWhileRunning()) { lbl.Text = ""; return; }
             if (f == null) { lbl.Text = ""; return; }
-            if (!TryGetPixelXYFromMouse(e, f, out int x, out int y)) { lbl.Text = ""; return; }
+
+            var img = e.Source as System.Windows.Controls.Image;
+            if (img == null) { lbl.Text = ""; return; }
+            var pane = PaneFromSender(img);
+            var (_, ovr, _) = GetPaneVisuals(pane);
+
+            if (!_pixelInspector.TryGetPixelXY(e, f, img, ovr, out int x, out int y)) { lbl.Text = ""; return; }
 
             byte v = f.Data[y * f.Stride + x];
             lbl.Text = PixelInspector.FormatGrayscaleInfo(x, y, v, f.Width);
@@ -2080,70 +1928,17 @@ namespace VideoStreamPlayer
             var refFrame = a ?? b;
             if (refFrame == null) { lbl.Text = ""; return; }
 
-            if (!TryGetPixelXYFromMouse(e, refFrame, out int x, out int y)) { lbl.Text = ""; return; }
+            var img = e.Source as System.Windows.Controls.Image;
+            if (img == null) { lbl.Text = ""; return; }
+            var pane = PaneFromSender(img);
+            var (_, ovr, _) = GetPaneVisuals(pane);
+
+            if (!_pixelInspector.TryGetPixelXY(e, refFrame, img, ovr, out int x, out int y)) { lbl.Text = ""; return; }
 
             int idx = (y * refFrame.Stride) + x;
             byte av = (a != null && idx < a.Data.Length) ? a.Data[idx] : (byte)0;
             byte bv = (b != null && idx < b.Data.Length) ? b.Data[idx] : (byte)0;
             lbl.Text = PixelInspector.FormatDiffInfo(x, y, av, bv, refFrame.Width);
-        }
-
-        private bool TryGetPixelXYFromMouse(MouseEventArgs e, Frame f, out int x, out int y)
-        {
-            x = 0;
-            y = 0;
-
-            var img = (System.Windows.Controls.Image)e.Source;
-            var pane = PaneFromSender(img);
-            var (_, ovr, _) = GetPaneVisuals(pane);
-
-            // Use visual transforms so hover mapping matches overlay mapping exactly.
-            Point pOvr = e.GetPosition(ovr);
-            GeneralTransform ovrToImg;
-            try
-            {
-                ovrToImg = ovr.TransformToVisual(img);
-            }
-            catch
-            {
-                return false;
-            }
-
-            Point pImg;
-            try
-            {
-                pImg = ovrToImg.Transform(pOvr);
-            }
-            catch
-            {
-                return false;
-            }
-
-            double lx = pImg.X;
-            double ly = pImg.Y;
-
-            double aw = img.ActualWidth;
-            double ah = img.ActualHeight;
-            if (aw <= 1 || ah <= 1) return false;
-
-            // Stretch=Uniform => image may be letterboxed. Compute displayed rect.
-            double scale = Math.Min(aw / f.Width, ah / f.Height);
-            double dw = f.Width * scale;
-            double dh = f.Height * scale;
-            double ox = (aw - dw) / 2.0;
-            double oy = (ah - dh) / 2.0;
-
-            double ix = lx - ox;
-            double iy = ly - oy;
-            if (ix < 0 || iy < 0 || ix >= dw || iy >= dh)
-                return false;
-
-            x = (int)(ix / scale);
-            y = (int)(iy / scale);
-            if (x < 0 || y < 0 || x >= f.Width || y >= f.Height)
-                return false;
-
-            return true;
         }
     }
 
