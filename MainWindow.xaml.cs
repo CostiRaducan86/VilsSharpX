@@ -44,37 +44,43 @@ namespace VideoStreamPlayer
             PlayerFromFiles = 0,
             AvtpLiveMonitor = 1,
         }
-        private const int W = 320;
-        private const int H_ACTIVE = 80;
+
+        // Default (Osram) resolution constants - used for protocol and as defaults
+        private const int DefaultW = 320;
+        private const int DefaultH = 80;
         private const int H_LVDS = 84;
         private const int META_LINES = 4; // bottom 4 (unused for now)
 
         // Selected LSM device type (determines resolution)
         private LsmDeviceType _currentDeviceType = LsmDeviceType.Osram20;
 
+        // Current resolution (based on selected device type)
+        private int _currentWidth = DefaultW;
+        private int _currentHeight = DefaultH;
+
         /// <summary>
         /// Gets the active frame width for the currently selected device type.
         /// </summary>
-        private int GetCurrentWidth() => _currentDeviceType.GetActiveWidth();
+        private int GetCurrentWidth() => _currentWidth;
 
         /// <summary>
         /// Gets the active frame height for the currently selected device type.
         /// </summary>
-        private int GetCurrentHeight() => _currentDeviceType.GetActiveHeight();
+        private int GetCurrentHeight() => _currentHeight;
 
         // Playback state management - delegated to PlaybackStateManager
         private readonly PlaybackStateManager _playback = new(FpsEstimationWindowSec, FpsEmaAlpha);
 
         // Live capture management - delegated to LiveCaptureManager  
-        private readonly LiveCaptureManager _liveCapture;
+        private LiveCaptureManager _liveCapture = null!;
 
         // Recording (AVI) - delegated to RecordingManager
-        private readonly RecordingManager _recordingManager = new(W, H_ACTIVE);
+        private RecordingManager _recordingManager = null!;
 
         private volatile int _bValueDelta;
 
         private volatile byte _diffThreshold;
-        private readonly byte[] _diffBgr = new byte[W * H_ACTIVE * 3];
+        private byte[] _diffBgr = null!;
 
         // If >0, forces B[pixel_ID] to 0 (simulated dead pixel). pixel_ID is 1..(W*H_ACTIVE).
         private int _forcedDeadPixelId;
@@ -95,14 +101,14 @@ namespace VideoStreamPlayer
         private ModeOfOperation _modeOfOperation = ModeOfOperation.AvtpLiveMonitor;
 
         // Fallback image / generator base
-        private byte[] _pgmFrame = new byte[W * H_ACTIVE];
+        private byte[] _pgmFrame = null!;
 
         // Always-available idle pattern so we can distinguish "no render" from black/loaded frames
-        private readonly byte[] _idleGradientFrame = new byte[W * H_ACTIVE];
+        private byte[] _idleGradientFrame = null!;
 
         // No-signal background (mid gray) rendered under the overlay.
-        private readonly byte[] _noSignalGrayFrame = new byte[W * H_ACTIVE];
-        private readonly byte[] _noSignalGrayBgr = new byte[W * H_ACTIVE * 3];
+        private byte[] _noSignalGrayFrame = null!;
+        private byte[] _noSignalGrayBgr = null!;
 
         // Optional LVDS source image (top-left 320x84). If loaded, B can be driven from this later.
         private byte[]? _lvdsFrame84;
@@ -111,13 +117,13 @@ namespace VideoStreamPlayer
         private string? _lastLoadedPcapPath;
 
         // Source players (extracted to separate classes)
-        private readonly SequencePlayer _sequencePlayer = new(W, H_ACTIVE);
-        private readonly ScenePlayer _scenePlayer = new(W, H_ACTIVE);
-        private readonly AviSourcePlayer _aviPlayer = new(W, H_ACTIVE, FpsEstimationWindowSec, FpsEmaAlpha);
-        private readonly SourceLoaderHelper _sourceLoader = new(W, H_ACTIVE, H_LVDS);
+        private SequencePlayer _sequencePlayer = null!;
+        private ScenePlayer _scenePlayer = null!;
+        private AviSourcePlayer _aviPlayer = null!;
+        private SourceLoaderHelper _sourceLoader = null!;
 
         // Frame snapshot/report saver
-        private readonly FrameSnapshotSaver _snapshotSaver = new(W, H_ACTIVE);
+        private FrameSnapshotSaver _snapshotSaver = null!;
 
         // Live NIC selector
         private readonly LiveNicSelector _nicSelector = new();
@@ -137,10 +143,10 @@ namespace VideoStreamPlayer
         private readonly ZoomPanManager _zoomPan = new();
 
         // Pixel inspector for hover info
-        private readonly PixelInspector _pixelInspector = new(W, H_ACTIVE);
+        private PixelInspector _pixelInspector = null!;
 
         // UI settings manager
-        private readonly UiSettingsManager _settingsManager = new(W, H_ACTIVE);
+        private UiSettingsManager _settingsManager = null!;
 
         private readonly DispatcherTimer _overlayTimerA;
         private readonly DispatcherTimer _overlayTimerB;
@@ -150,12 +156,12 @@ namespace VideoStreamPlayer
         private bool _overlayPendingB;
         private bool _overlayPendingD;
 
-        private readonly WriteableBitmap _wbA = BitmapUtils.MakeGray8(W, H_ACTIVE);
-        private readonly WriteableBitmap _wbB = BitmapUtils.MakeGray8(W, H_ACTIVE);
-        private readonly WriteableBitmap _wbD = BitmapUtils.MakeBgr24(W, H_ACTIVE);
+        private WriteableBitmap _wbA = null!;
+        private WriteableBitmap _wbB = null!;
+        private WriteableBitmap _wbD = null!;
 
         // --- AVTP Transmitter (managed by AvtpTransmitManager) ---
-        private readonly AvtpTransmitManager _txManager = new(W, H_ACTIVE, AppendUdpLog);
+        private AvtpTransmitManager _txManager = null!;
 
         private void ShowSaveFeedback(string message, Brush color)
         {
@@ -179,8 +185,8 @@ namespace VideoStreamPlayer
 
         public MainWindow()
         {
-            // Initialize LiveCaptureManager before anything else
-            _liveCapture = new LiveCaptureManager(W, H_ACTIVE, FpsEstimationWindowSec * 2.5, AppendUdpLog);
+            // Initialize resolution-dependent objects with default (Osram) resolution
+            InitializeResolutionDependentObjects();
 
             // XAML can trigger SelectionChanged/TextChanged during InitializeComponent.
             // Treat that phase like settings-load to avoid running app logic before controls/bitmaps are wired.
@@ -201,12 +207,80 @@ namespace VideoStreamPlayer
             _settingsManager.IsLoading = false;
         }
 
+        /// <summary>
+        /// Initializes or reinitializes all resolution-dependent objects based on _currentDeviceType.
+        /// Must be called: 1) in constructor (before InitializeComponent), 2) when device type changes.
+        /// </summary>
+        private void InitializeResolutionDependentObjects()
+        {
+            _currentWidth = _currentDeviceType.GetActiveWidth();
+            _currentHeight = _currentDeviceType.GetActiveHeight();
+
+            int w = _currentWidth;
+            int h = _currentHeight;
+
+            // Frame buffers
+            _diffBgr = new byte[w * h * 3];
+            _pgmFrame = new byte[w * h];
+            _idleGradientFrame = new byte[w * h];
+            _noSignalGrayFrame = new byte[w * h];
+            _noSignalGrayBgr = new byte[w * h * 3];
+
+            // Bitmaps
+            _wbA = BitmapUtils.MakeGray8(w, h);
+            _wbB = BitmapUtils.MakeGray8(w, h);
+            _wbD = BitmapUtils.MakeBgr24(w, h);
+
+            // Helper classes that depend on resolution
+            _liveCapture = new LiveCaptureManager(w, h, FpsEstimationWindowSec * 2.5, AppendUdpLog);
+            _recordingManager = new RecordingManager(w, h);
+            _sequencePlayer = new SequencePlayer(w, h);
+            _scenePlayer = new ScenePlayer(w, h);
+            _aviPlayer = new AviSourcePlayer(w, h, FpsEstimationWindowSec, FpsEmaAlpha);
+            _sourceLoader = new SourceLoaderHelper(w, h, H_LVDS);
+            _snapshotSaver = new FrameSnapshotSaver(w, h);
+            _pixelInspector = new PixelInspector(w, h);
+            _settingsManager = new UiSettingsManager(w, h);
+            _txManager = new AvtpTransmitManager(w, h, AppendUdpLog);
+        }
+
+        /// <summary>
+        /// Reinitializes resolution-dependent objects after device type change.
+        /// Called from CmbLsmDeviceType_SelectionChanged.
+        /// </summary>
+        private void ReinitializeForNewResolution()
+        {
+            InitializeResolutionDependentObjects();
+            InitializeDefaultPatterns();
+
+            // Rebind bitmaps to UI
+            if (ImgA != null) ImgA.Source = _wbA;
+            if (ImgB != null) ImgB.Source = _wbB;
+            if (ImgD != null) ImgD.Source = _wbD;
+
+            // Reset frame state
+            lock (_frameLock)
+            {
+                _latestA = null;
+                _latestB = null;
+                _latestD = null;
+                _pausedA = null;
+                _pausedB = null;
+                _pausedD = null;
+            }
+
+            RenderNoSignalFrames();
+        }
+
         private void InitializeDefaultPatterns()
         {
+            int w = _currentWidth;
+            int h = _currentHeight;
+
             // Horizontal gradient (fallback)
-            for (int y = 0; y < H_ACTIVE; y++)
-                for (int x = 0; x < W; x++)
-                    _idleGradientFrame[y * W + x] = (byte)(x * 255 / (W - 1));
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    _idleGradientFrame[y * w + x] = (byte)(x * 255 / (w - 1));
 
             // No-signal pattern: flat mid-gray
             Array.Fill(_noSignalGrayFrame, (byte)0x80);
@@ -276,9 +350,9 @@ namespace VideoStreamPlayer
 
         private void RenderNoSignalFrames()
         {
-            BitmapUtils.Blit(_wbA, _noSignalGrayFrame, W);
-            BitmapUtils.Blit(_wbB, _noSignalGrayFrame, W);
-            BitmapUtils.Blit(_wbD, _noSignalGrayBgr, W * 3);
+            BitmapUtils.Blit(_wbA, _noSignalGrayFrame, _currentWidth);
+            BitmapUtils.Blit(_wbB, _noSignalGrayFrame, _currentWidth);
+            BitmapUtils.Blit(_wbD, _noSignalGrayBgr, _currentWidth * 3);
         }
 
         private DispatcherTimer MakeOverlayTimer(Pane pane)
@@ -417,7 +491,7 @@ namespace VideoStreamPlayer
                     try
                     {
                         var copy = ImageUtils.Copy(_liveCapture.AvtpFrame);
-                        aLive = new Frame(W, H_ACTIVE, copy, _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
+                        aLive = new Frame(_currentWidth, _currentHeight, copy, _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
                     }
                     catch
                     {
@@ -434,13 +508,13 @@ namespace VideoStreamPlayer
                         if (aLive != null)
                         {
                             var bBytes = ApplyValueDelta(aLive.Data, _bValueDelta);
-                            bLive = new Frame(W, H_ACTIVE, bBytes, aLive.TimestampUtc);
+                            bLive = new Frame(_currentWidth, _currentHeight, bBytes, aLive.TimestampUtc);
                         }
                         else
                         {
                             var copyB = ImageUtils.Copy(_liveCapture.AvtpFrame);
                             var bBytes = ApplyValueDelta(copyB, _bValueDelta);
-                            bLive = new Frame(W, H_ACTIVE, bBytes, _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
+                            bLive = new Frame(_currentWidth, _currentHeight, bBytes, _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
                         }
                     }
                     catch
@@ -468,13 +542,13 @@ namespace VideoStreamPlayer
                         }
                         else if (aLive == null && bLive != null)
                         {
-                            var aFallback = new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
+                            var aFallback = new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
                             dLive = AbsDiff(aFallback, bLive);
                         }
                         else if (aLive != null && bLive == null)
                         {
                             var bFallbackBytes = ApplyValueDelta(aLive.Data, _bValueDelta);
-                            var bFallback = new Frame(W, H_ACTIVE, bFallbackBytes, aLive.TimestampUtc);
+                            var bFallback = new Frame(_currentWidth, _currentHeight, bFallbackBytes, aLive.TimestampUtc);
                             dLive = AbsDiff(aLive, bFallback);
                         }
                     }
@@ -494,7 +568,7 @@ namespace VideoStreamPlayer
 
         private Frame ApplyBPostProcessing(Frame a, Frame b)
         {
-            return DarkPixelCompensation.ApplyBPostProcessing(a, b, W, H_ACTIVE, 
+            return DarkPixelCompensation.ApplyBPostProcessing(a, b, _currentWidth, _currentHeight, 
                 _darkPixelCompensationEnabled, Volatile.Read(ref _forcedDeadPixelId));
         }
 
@@ -584,7 +658,7 @@ namespace VideoStreamPlayer
             ShowIdleGradient();
             int w = GetCurrentWidth();
             int h = GetCurrentHeight();
-            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}×{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
+            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}�{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
 
             LoadUiSettings();
 
@@ -743,12 +817,11 @@ namespace VideoStreamPlayer
             _currentDeviceType = newDeviceType;
             SaveUiSettings();
 
-            // Device type change affects resolution expectations
+            // Device type change affects resolution - reinitialize all resolution-dependent objects
             StopAll();
-            _liveCapture.Reassembler.ResetAll();
-            _liveCapture.ClearAvtpFrame();
+            ReinitializeForNewResolution();
 
-            LblStatus.Text = $"Device Type: {_currentDeviceType.GetDisplayName()} ({GetCurrentWidth()}×{GetCurrentHeight()}). Load a file or start live capture.";
+            LblStatus.Text = $"Device Type: {_currentDeviceType.GetDisplayName()} ({GetCurrentWidth()}x{GetCurrentHeight()}). Load a file or start live capture.";
         }
 
         // Convenience aliases for live capture feed - delegate to _liveCapture
@@ -782,9 +855,9 @@ namespace VideoStreamPlayer
             if (_playback.Cts == null || _playback.IsPaused)
             {
                 // keep latestA/B/D consistent with new offset
-                var a = _latestA ?? new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
+                var a = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
                 var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
-                var b = new Frame(W, H_ACTIVE, bBytes, DateTime.UtcNow);
+                var b = new Frame(_currentWidth, _currentHeight, bBytes, DateTime.UtcNow);
                 lock (_frameLock)
                 {
                     _latestA = a;
@@ -807,7 +880,7 @@ namespace VideoStreamPlayer
         {
             int id = 0;
             if (TxtDeadPixelId != null && int.TryParse(TxtDeadPixelId.Text, out var parsed))
-                id = Math.Clamp(parsed, 0, W * H_ACTIVE);
+                id = Math.Clamp(parsed, 0, _currentWidth * _currentHeight);
 
             Volatile.Write(ref _forcedDeadPixelId, id);
 
@@ -1019,12 +1092,12 @@ namespace VideoStreamPlayer
             // Freeze the currently displayed frames so overlays match the frozen bitmap.
             lock (_frameLock)
             {
-                _pausedA = _latestA ?? new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
+                _pausedA = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
 
                 if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
                 {
                     // In AVTP Live mode, B is derived from A using the UI delta; D is derived from (B-A).
-                    _pausedB = new Frame(W, H_ACTIVE, ApplyValueDelta(_pausedA.Data, _bValueDelta), _pausedA.TimestampUtc);
+                    _pausedB = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(_pausedA.Data, _bValueDelta), _pausedA.TimestampUtc);
                     _pausedD = AbsDiff(_pausedA, _pausedB);
                 }
                 else
@@ -1377,13 +1450,13 @@ namespace VideoStreamPlayer
                 return;
             }
 
-            if (img.width < W || img.height < H_ACTIVE)
+            if (img.width < _currentWidth || img.height < _currentHeight)
             {
-                MessageBox.Show($"Expected at least {W}x{H_ACTIVE}, got {img.width}x{img.height}.", "Size mismatch");
+                MessageBox.Show($"Expected at least {_currentWidth}x{_currentHeight}, got {img.width}x{img.height}.", "Size mismatch");
                 return;
             }
 
-            var cropped = ImageUtils.CropTopLeftGray8(img.data, img.width, img.height, W, H_ACTIVE);
+            var cropped = ImageUtils.CropTopLeftGray8(img.data, img.width, img.height, _currentWidth, _currentHeight);
 
             if (isA)
             {
@@ -1482,9 +1555,9 @@ namespace VideoStreamPlayer
         {
             var now = DateTime.UtcNow;
             var aBytes = GetASourceBytes();
-            var a = new Frame(W, H_ACTIVE, aBytes, now);
+            var a = new Frame(_currentWidth, _currentHeight, aBytes, now);
             var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
-            var b = new Frame(W, H_ACTIVE, bBytes, now);
+            var b = new Frame(_currentWidth, _currentHeight, bBytes, now);
             var d = AbsDiff(a, b);
 
             lock (_frameLock)
@@ -1542,12 +1615,12 @@ namespace VideoStreamPlayer
         
                 // A: either UDP latest or PGM/AVI/Scene fallback (depending on what you loaded)
                 var aBytes = GetASourceBytes();
-                var a = new Frame(W, H_ACTIVE, aBytes, DateTime.UtcNow);
+                var a = new Frame(_currentWidth, _currentHeight, aBytes, DateTime.UtcNow);
                 _playback.IncrementCountA();
         
                 // B: simulated LVDS = A with brightness delta
                 var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
-                var b = new Frame(W, H_ACTIVE, bBytes, DateTime.UtcNow);
+                var b = new Frame(_currentWidth, _currentHeight, bBytes, DateTime.UtcNow);
                 _playback.IncrementCountB();
         
                 // D: diff
@@ -1682,7 +1755,7 @@ namespace VideoStreamPlayer
                 }
                 else
                 {
-                    a = _latestA ?? new Frame(W, H_ACTIVE, GetASourceBytes(), DateTime.UtcNow);
+                    a = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
                     b = _latestB ?? a;
                     d = _latestD ?? AbsDiff(a, b);
                 }
@@ -1691,7 +1764,7 @@ namespace VideoStreamPlayer
             // In AVTP Live mode, B is derived from A using the UI delta, D is derived from (B-A).
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
-                b = new Frame(W, H_ACTIVE, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
+                b = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
                 d = AbsDiff(a, b);
             }
 
@@ -1700,12 +1773,12 @@ namespace VideoStreamPlayer
 
             BitmapUtils.Blit(_wbA, a.Data, a.Stride);
             BitmapUtils.Blit(_wbB, b.Data, b.Stride);
-            DiffRenderer.RenderCompareToBgr(_diffBgr, a.Data, b.Data, W, H_ACTIVE, _diffThreshold,
+            DiffRenderer.RenderCompareToBgr(_diffBgr, a.Data, b.Data, _currentWidth, _currentHeight, _diffThreshold,
                 _zeroZeroIsWhite,
                 out var minDiff, out var maxDiff, out var meanDiff,
                 out var maxAbsDiff, out var meanAbsDiff, out var aboveDeadband,
                 out var totalDarkPixels);
-            BitmapUtils.Blit(_wbD, _diffBgr, W * 3);
+            BitmapUtils.Blit(_wbD, _diffBgr, _currentWidth * 3);
 
             // Record what we render (A/B in Gray8; D in Bgr24). Diff buffer is reused, so copy it.
             if (_recordingManager.IsRecording && !_playback.IsPaused && _playback.Cts != null)
@@ -1769,7 +1842,7 @@ namespace VideoStreamPlayer
             };
         }
 
-        private static Frame AbsDiff(Frame a, Frame b) => ImageUtils.AbsDiff(a, b, W, H_ACTIVE);
+        private Frame AbsDiff(Frame a, Frame b) => ImageUtils.AbsDiff(a, b, _currentWidth, _currentHeight);
         private static byte[] ApplyValueDelta(byte[] src, int delta) => ImageUtils.ApplyValueDelta(src, delta);
 
         private void ImgA_MouseMove(object sender, MouseEventArgs e) => ShowPixelInfo(e, GetDisplayedFrameForPane(Pane.A), LblA);
