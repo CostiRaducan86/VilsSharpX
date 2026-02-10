@@ -98,11 +98,11 @@ public static class StatusFormatter
     /// Formats the AVTP RVF status line (live capture stats).
     /// </summary>
     public static string FormatAvtpRvfStatus(
-        string src, uint frameId, uint seq, int linesWritten, int seqGaps,
+        string src, uint frameId, uint seq, int linesWritten, int expectedHeight, int seqGaps,
         int dropped, int gapFrames, int incomplete, int lateSkip)
     {
         string late = lateSkip > 0 ? $" | lateSkip={lateSkip}" : "";
-        return $"AVTP RVF ({src}): frameId={frameId} seq={seq} lines={linesWritten}/80 gaps={seqGaps} | dropped={dropped} (gapFrames={gapFrames}, incomplete={incomplete}){late}";
+        return $"AVTP RVF ({src}): frameId={frameId} seq={seq} lines={linesWritten}/{expectedHeight} gaps={seqGaps} | dropped={dropped} (gapFrames={gapFrames}, incomplete={incomplete}){late}";
     }
 
     /// <summary>

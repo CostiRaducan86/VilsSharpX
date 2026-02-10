@@ -98,7 +98,8 @@ public sealed class UiSettingsManager
         bool avtpLiveUdpEnabled,
         int modeOfOperation,
         string srcMac,
-        string dstMac)
+        string dstMac,
+        int lsmDeviceType = 0)
     {
         return new AppSettings
         {
@@ -113,7 +114,8 @@ public sealed class UiSettingsManager
             AvtpLiveUdpEnabled = avtpLiveUdpEnabled,
             ModeOfOperation = modeOfOperation,
             SrcMac = srcMac,
-            DstMac = dstMac
+            DstMac = dstMac,
+            LsmDeviceType = lsmDeviceType
         };
     }
 }

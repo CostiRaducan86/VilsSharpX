@@ -205,13 +205,24 @@
                 </GroupBox>
 
                 <GroupBox Header="Configuration" Padding="10" Margin="0,0,0,6">
-                    <WrapPanel HorizontalAlignment="Center">
-                        <TextBlock Text="Source MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="TxtSrcMac" Width="140" Text="3C:CE:15:00:00:19" Margin="0,0,18,0" TextChanged="TxtMac_TextChanged"/>
+                    <StackPanel Orientation="Vertical">
+                        <WrapPanel HorizontalAlignment="Center" Margin="0,0,0,8">
+                            <TextBlock Text="LSM Device Type:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbLsmDeviceType" Width="140" SelectedIndex="0" SelectionChanged="CmbLsmDeviceType_SelectionChanged" Margin="0,0,18,0">
+                                <ComboBoxItem Content="Osram 2.0"/>
+                                <ComboBoxItem Content="Osram 2.05"/>
+                                <ComboBoxItem Content="Nichia"/>
+                            </ComboBox>
+                        </WrapPanel>
 
-                        <TextBlock Text="Destination MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="TxtDstMac" Width="140" Text="01:00:5E:16:00:12" Margin="0,0,0,0" TextChanged="TxtMac_TextChanged"/>
-                    </WrapPanel>
+                        <WrapPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Source MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtSrcMac" Width="140" Text="3C:CE:15:00:00:19" Margin="0,0,18,0" TextChanged="TxtMac_TextChanged"/>
+
+                            <TextBlock Text="Destination MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtDstMac" Width="140" Text="01:00:5E:16:00:12" Margin="0,0,0,0" TextChanged="TxtMac_TextChanged"/>
+                        </WrapPanel>
+                    </StackPanel>
                 </GroupBox>
             </StackPanel>
 

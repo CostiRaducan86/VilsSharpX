@@ -23,8 +23,10 @@ public sealed class RvfReassembler
     public const int W = 320;
     public const int H = 80;
 
-    private readonly byte[] _frame = new byte[W * H];
-    private readonly bool[] _lineWritten = new bool[H];
+    private readonly int _w;
+    private readonly int _h;
+    private readonly byte[] _frame;
+    private readonly bool[] _lineWritten;
 
     private uint _lastSeq;
     private bool _haveLastSeq;
@@ -33,6 +35,19 @@ public sealed class RvfReassembler
     private int _seqGapsThisFrame;
 
     public event Action<byte[], FrameMeta>? OnFrameReady;
+
+    /// <summary>
+    /// Creates a new RVF reassembler with the specified resolution.
+    /// </summary>
+    /// <param name="width">Frame width (default: 320)</param>
+    /// <param name="height">Frame height (default: 80)</param>
+    public RvfReassembler(int width = W, int height = H)
+    {
+        _w = width;
+        _h = height;
+        _frame = new byte[_w * _h];
+        _lineWritten = new bool[_h];
+    }
 
     public void ResetAll()
     {
@@ -51,8 +66,8 @@ public sealed class RvfReassembler
     public void Push(RvfChunk c)
     {
         // basic guards (we keep it strict for your stream)
-        if (c.Width != W) return;
-        if (c.Height != H) return;
+        if (c.Width != _w) return;
+        if (c.Height != _h) return;
         if (c.NumLines == 0) return;
 
         // sequence gap detect
@@ -66,10 +81,10 @@ public sealed class RvfReassembler
 
         // line number in your CAPL is 1,5,9,... (step = numLines)
         int startLine0 = c.LineNumber1Based - 1;
-        if (startLine0 < 0 || startLine0 >= H) return;
+        if (startLine0 < 0 || startLine0 >= _h) return;
 
         int lines = c.NumLines;
-        int bytesPerLine = W;
+        int bytesPerLine = _w;
 
         // payload is numLines*W bytes
         if (c.Payload.Length < lines * bytesPerLine) return;
@@ -77,12 +92,12 @@ public sealed class RvfReassembler
         for (int l = 0; l < lines; l++)
         {
             int y = startLine0 + l;
-            if (y < 0 || y >= H) continue;
+            if (y < 0 || y >= _h) continue;
 
-            int dst = y * W;
-            int src = l * W;
+            int dst = y * _w;
+            int src = l * _w;
 
-            Buffer.BlockCopy(c.Payload, src, _frame, dst, W);
+            Buffer.BlockCopy(c.Payload, src, _frame, dst, _w);
 
             if (!_lineWritten[y])
             {
@@ -94,7 +109,7 @@ public sealed class RvfReassembler
         if (c.EndFrame)
         {
             // emit a COPY so UI can render while we assemble next frames
-            var outFrame = new byte[W * H];
+            var outFrame = new byte[_w * _h];
             Buffer.BlockCopy(_frame, 0, outFrame, 0, outFrame.Length);
 
             var meta = new FrameMeta(

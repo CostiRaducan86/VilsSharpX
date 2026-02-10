@@ -17,37 +17,38 @@ namespace VideoStreamPlayer
             PcapReplay = 3,
         }
 
-        private readonly RvfReassembler _rvf = new();
-        private readonly object _rvfPushLock = new();
-        private readonly Action<string> _log;
+    private readonly RvfReassembler _rvf;
+    private readonly object _rvfPushLock = new();
+    private readonly Action<string> _log;
 
-        private CancellationTokenSource? _udpCts;
-        private RvfUdpReceiver? _udp;
-        private AvtpLiveCapture? _avtpLive;
-        private CancellationTokenSource? _pcapCts;
+    private CancellationTokenSource? _udpCts;
+    private RvfUdpReceiver? _udp;
+    private AvtpLiveCapture? _avtpLive;
+    private CancellationTokenSource? _pcapCts;
 
-        private int _activeFeed = (int)Feed.None;
+    private int _activeFeed = (int)Feed.None;
 
-        // AVTP frame buffer (320x80)
-        private byte[] _avtpFrame;
-        private bool _hasAvtpFrame;
-        private DateTime _lastAvtpFrameUtc = DateTime.MinValue;
+    // AVTP frame buffer (320x80 max)
+    private byte[] _avtpFrame;
+    private bool _hasAvtpFrame;
+    private DateTime _lastAvtpFrameUtc = DateTime.MinValue;
 
-        // Signal loss detection
-        private DateTime _suppressLiveUntilUtc = DateTime.MinValue;
-        private readonly TimeSpan _liveSignalLostTimeout;
+    // Signal loss detection
+    private DateTime _suppressLiveUntilUtc = DateTime.MinValue;
+    private readonly TimeSpan _liveSignalLostTimeout;
 
-        private string _lastRvfSrcLabel = "?";
+    private string _lastRvfSrcLabel = "?";
 
-        public LiveCaptureManager(int width, int height, double signalLostTimeoutSec, Action<string> log)
-        {
-            _avtpFrame = new byte[width * height];
-            _liveSignalLostTimeout = TimeSpan.FromSeconds(signalLostTimeoutSec);
-            _log = log ?? (_ => { });
+    public LiveCaptureManager(int width, int height, double signalLostTimeoutSec, Action<string> log)
+    {
+        _avtpFrame = new byte[width * height];
+        _rvf = new RvfReassembler(width, height);
+        _liveSignalLostTimeout = TimeSpan.FromSeconds(signalLostTimeoutSec);
+        _log = log ?? (_ => { });
 
-            // Wire up reassembler frame ready event
-            _rvf.OnFrameReady += OnRvfFrameReady;
-        }
+        // Wire up reassembler frame ready event
+        _rvf.OnFrameReady += OnRvfFrameReady;
+    }
 
         // Events
         public event Action<byte[], FrameMeta>? OnFrameReady;

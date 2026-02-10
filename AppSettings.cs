@@ -6,7 +6,7 @@ namespace VideoStreamPlayer;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsVersion = 5;
+    public const int CurrentSettingsVersion = 6;
 
     public int SettingsVersion { get; set; } = CurrentSettingsVersion;
 
@@ -35,6 +35,9 @@ public sealed class AppSettings
     // AVTP TX MAC addresses (format: "XX:XX:XX:XX:XX:XX")
     public string SrcMac { get; set; } = "3C:CE:15:00:00:19";
     public string DstMac { get; set; } = "01:00:5E:16:00:12";
+
+    // LSM Device Type (0=Osram20, 1=Osram205, 2=Nichia)
+    public int LsmDeviceType { get; set; } = 0;
 }
 
 public static class AppSettingsStore
@@ -87,6 +90,14 @@ public static class AppSettingsStore
                 settings.SrcMac = "3C:CE:15:00:00:19";
                 settings.DstMac = "01:00:5E:16:00:12";
                 settings.SettingsVersion = 5;
+                migrated = true;
+            }
+
+            if (settings.SettingsVersion < 6)
+            {
+                // Migration: add LSM device type setting with default (Osram 2.0).
+                settings.LsmDeviceType = 0;
+                settings.SettingsVersion = 6;
                 migrated = true;
             }
 

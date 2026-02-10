@@ -49,6 +49,19 @@ namespace VideoStreamPlayer
         private const int H_LVDS = 84;
         private const int META_LINES = 4; // bottom 4 (unused for now)
 
+        // Selected LSM device type (determines resolution)
+        private LsmDeviceType _currentDeviceType = LsmDeviceType.Osram20;
+
+        /// <summary>
+        /// Gets the active frame width for the currently selected device type.
+        /// </summary>
+        private int GetCurrentWidth() => _currentDeviceType.GetActiveWidth();
+
+        /// <summary>
+        /// Gets the active frame height for the currently selected device type.
+        /// </summary>
+        private int GetCurrentHeight() => _currentDeviceType.GetActiveHeight();
+
         // Playback state management - delegated to PlaybackStateManager
         private readonly PlaybackStateManager _playback = new(FpsEstimationWindowSec, FpsEmaAlpha);
 
@@ -569,7 +582,9 @@ namespace VideoStreamPlayer
             _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
 
             ShowIdleGradient();
-            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to 320×80) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
+            int w = GetCurrentWidth();
+            int h = GetCurrentHeight();
+            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}×{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
 
             LoadUiSettings();
 
@@ -585,7 +600,8 @@ namespace VideoStreamPlayer
 
             _playback.IncrementCountAvtpIn();
 
-            bool incomplete = meta.linesWritten != H_ACTIVE;
+            int expectedHeight = GetCurrentHeight();
+            bool incomplete = meta.linesWritten != expectedHeight;
             bool gap = meta.seqGaps > 0;
             if (incomplete) _playback.IncrementCountAvtpIncomplete();
             if (gap)
@@ -609,7 +625,7 @@ namespace VideoStreamPlayer
             _liveCapture.LastRvfSrcLabel = src;
 
             LblStatus.Text = StatusFormatter.FormatAvtpRvfStatus(
-                src, meta.frameId, meta.seq, meta.linesWritten, meta.seqGaps,
+                src, meta.frameId, meta.seq, meta.linesWritten, expectedHeight, meta.seqGaps,
                 _playback.CountAvtpDropped, _playback.CountAvtpSeqGapFrames,
                 _playback.CountAvtpIncomplete, _playback.CountLateFramesSkipped);
         }
@@ -637,6 +653,13 @@ namespace VideoStreamPlayer
                     ? ModeOfOperation.AvtpLiveMonitor
                     : ModeOfOperation.PlayerFromFiles;
 
+                _currentDeviceType = s.LsmDeviceType switch
+                {
+                    1 => LsmDeviceType.Osram205,
+                    2 => LsmDeviceType.Nichia,
+                    _ => LsmDeviceType.Osram20
+                };
+
                 if (TxtFps != null) TxtFps.Text = s.Fps.ToString();
                 if (TxtBDelta != null) TxtBDelta.Text = s.BDelta.ToString();
                 if (SldDiffThr != null) SldDiffThr.Value = s.Deadband;
@@ -651,6 +674,12 @@ namespace VideoStreamPlayer
                 {
                     CmbModeOfOperation.SelectedIndex = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor ? 0 : 1;
                 }
+
+                if (CmbLsmDeviceType != null)
+                {
+                    CmbLsmDeviceType.SelectedIndex = (int)_currentDeviceType;
+                }
+
                 RefreshLiveNicList();
                 UpdateLiveUiEnabledState();
 
@@ -669,7 +698,7 @@ namespace VideoStreamPlayer
                 fps, _bValueDelta, _diffThreshold, _zeroZeroIsWhite,
                 Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
                 _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation,
-                _srcMac, _dstMac);
+                _srcMac, _dstMac, (int)_currentDeviceType);
             _settingsManager.TrySave(s);
         }
 
@@ -696,6 +725,30 @@ namespace VideoStreamPlayer
             LblStatus.Text = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor
                 ? "Mode: AVTP Live (Monitoring). Press Start to listen/capture live stream."
                 : "Mode: Generator/Player (Files). Load a file and press Start.";
+        }
+
+        private void CmbLsmDeviceType_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading || !IsLoaded) return;
+
+            var newDeviceType = (CmbLsmDeviceType?.SelectedIndex ?? 0) switch
+            {
+                1 => LsmDeviceType.Osram205,
+                2 => LsmDeviceType.Nichia,
+                _ => LsmDeviceType.Osram20
+            };
+
+            if (newDeviceType == _currentDeviceType) return;
+
+            _currentDeviceType = newDeviceType;
+            SaveUiSettings();
+
+            // Device type change affects resolution expectations
+            StopAll();
+            _liveCapture.Reassembler.ResetAll();
+            _liveCapture.ClearAvtpFrame();
+
+            LblStatus.Text = $"Device Type: {_currentDeviceType.GetDisplayName()} ({GetCurrentWidth()}×{GetCurrentHeight()}). Load a file or start live capture.";
         }
 
         // Convenience aliases for live capture feed - delegate to _liveCapture
