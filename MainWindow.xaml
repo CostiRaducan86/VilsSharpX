@@ -1,7 +1,7 @@
 ﻿<Window x:Class="VideoStreamPlayer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Gray8 Monitor" Width="1400" Height="900" WindowStartupLocation="CenterScreen"
+    Title="VILS SharpX" Width="1400" Height="900" WindowStartupLocation="CenterScreen"
     UseLayoutRounding="True" SnapsToDevicePixels="True"
         Loaded="Window_Loaded" Closing="Window_Closing">
     <Grid Margin="10">
@@ -28,7 +28,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="AVTP / Generator (320×80 Gray8)" />
+                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="AVTP Monitor / Generator" />
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblA" HorizontalAlignment="Center" Foreground="DimGray" />
                 <TextBlock Grid.Row="0" Grid.Column="2" x:Name="LblRunInfoA" HorizontalAlignment="Right" Foreground="DimGray" />
 
@@ -63,7 +63,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="LVDS (320×84 bottom 4 metadata → cropped to 320×80)" />
+                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="LVDS Monitor / Generator" />
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblB" HorizontalAlignment="Center" Foreground="DimGray" />
                     <TextBlock Grid.Row="0" Grid.Column="2" x:Name="LblRunInfoB" HorizontalAlignment="Right" Foreground="DimGray" />
 
@@ -98,7 +98,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="DIFF (B−A) (320×80)" />
+                <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="Comparison Monitor (LVDS-AVTP)" />
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblD" HorizontalAlignment="Center" Foreground="DimGray" />
 
                 <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgD" Stretch="Uniform"
