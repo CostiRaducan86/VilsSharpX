@@ -250,8 +250,18 @@ namespace VideoStreamPlayer
         /// </summary>
         private void ReinitializeForNewResolution()
         {
+            // IMPORTANT: Dispose old managers that hold external resources before recreating them.
+            // This prevents stale resources (pcap devices, sockets, files) from causing issues.
+            try { _txManager?.Dispose(); } catch { /* ignore */ }
+            try { _liveCapture?.Dispose(); } catch { /* ignore */ }
+            try { _aviPlayer?.Dispose(); } catch { /* ignore */ }
+
             InitializeResolutionDependentObjects();
             InitializeDefaultPatterns();
+
+            // Re-subscribe to LiveCaptureManager events (since we recreated the instance)
+            if (_liveCapture != null)
+                _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
 
             // Rebind bitmaps to UI
             if (ImgA != null) ImgA.Source = _wbA;

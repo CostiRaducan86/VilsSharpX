@@ -6,9 +6,14 @@ namespace VideoStreamPlayer;
 
 /// <summary>
 /// Manages AVTP frame transmission (TX) for PlayerFromFiles mode.
+/// AVTP packets always use 320×80 (25,600 bytes) format as per protocol spec.
+/// For Nichia (256×64), frames are zero-padded to match the protocol requirement.
 /// </summary>
 public sealed class AvtpTransmitManager : IDisposable
 {
+    // AVTP protocol always uses 320×80 frame format (like CANoe implementation)
+    private const int AVTP_FRAME_SIZE = 320 * 80; // 25,600 bytes
+
     private readonly Action<string> _log;
     private readonly int _width;
     private readonly int _height;
@@ -17,6 +22,7 @@ public sealed class AvtpTransmitManager : IDisposable
     private CancellationTokenSource? _blackCts;
     private Task? _blackTask;
     private readonly byte[] _blackFrame;
+    private readonly byte[] _paddedFrame; // Reusable buffer for padding
 
     private int _txErrOnce;
     private int _txNoDevOnce;
@@ -26,7 +32,10 @@ public sealed class AvtpTransmitManager : IDisposable
         _width = width;
         _height = height;
         _log = log ?? (_ => { });
-        _blackFrame = new byte[width * height];
+        // BLACK frame is always AVTP size (320×80) - already zero-filled by CLR
+        _blackFrame = new byte[AVTP_FRAME_SIZE];
+        // Reusable buffer for padding smaller frames
+        _paddedFrame = new byte[AVTP_FRAME_SIZE];
     }
 
     /// <summary>
@@ -66,7 +75,8 @@ public sealed class AvtpTransmitManager : IDisposable
     }
 
     /// <summary>
-    /// Sends a frame asynchronously. Logs errors only once to avoid spam.
+    /// Sends a frame asynchronously. Pads smaller frames to AVTP protocol size (25,600 bytes).
+    /// For Nichia (256×64 = 16,384 bytes), the frame is zero-padded linearly (CANoe approach).
     /// </summary>
     public async Task<bool> SendFrameAsync(byte[] frameData, CancellationToken ct)
     {
@@ -79,7 +89,9 @@ public sealed class AvtpTransmitManager : IDisposable
 
         try
         {
-            await _tx.SendFrame320x80Async(frameData, ct);
+            // Pad frame to AVTP protocol size if needed (e.g., Nichia 256×64 -> 320×80)
+            byte[] txFrame = PadToAvtpSize(frameData);
+            await _tx.SendFrame320x80Async(txFrame, ct);
             return true;
         }
         catch (OperationCanceledException)
@@ -92,6 +104,29 @@ public sealed class AvtpTransmitManager : IDisposable
                 _log($"[avtp-tx] SEND ERROR (first): {ex.GetType().Name}: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Pads frame data to AVTP protocol size (25,600 bytes) if needed.
+    /// Uses linear padding (copy source bytes, rest is zero) like CANoe implementation.
+    /// </summary>
+    private byte[] PadToAvtpSize(byte[] frameData)
+    {
+        if (frameData.Length == AVTP_FRAME_SIZE)
+            return frameData; // Already correct size (320×80)
+
+        if (frameData.Length > AVTP_FRAME_SIZE)
+        {
+            // Truncate if larger (shouldn't happen, but be safe)
+            Buffer.BlockCopy(frameData, 0, _paddedFrame, 0, AVTP_FRAME_SIZE);
+        }
+        else
+        {
+            // Copy source frame and zero-pad the rest (linear padding like CANoe)
+            Buffer.BlockCopy(frameData, 0, _paddedFrame, 0, frameData.Length);
+            Array.Clear(_paddedFrame, frameData.Length, AVTP_FRAME_SIZE - frameData.Length);
+        }
+        return _paddedFrame;
     }
 
     /// <summary>
