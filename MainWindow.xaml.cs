@@ -368,14 +368,16 @@ namespace VideoStreamPlayer
         /// </summary>
         private void ApplyButtonStates(bool isRunning)
         {
-            if (BtnLoadFiles != null) BtnLoadFiles.IsEnabled = !isRunning;
+            bool isAvtpLive = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
+            // Load Files is disabled while running OR when in AVTP Live mode (no file sources)
+            if (BtnLoadFiles != null) BtnLoadFiles.IsEnabled = !isRunning && !isAvtpLive;
             if (BtnStart != null) BtnStart.IsEnabled = true; // always enabled (Start or Pause/Resume)
             if (BtnPrev != null) BtnPrev.IsEnabled = isRunning;
             if (BtnNext != null) BtnNext.IsEnabled = isRunning;
             if (BtnRecord != null) BtnRecord.IsEnabled = isRunning;
             if (BtnStop != null) BtnStop.IsEnabled = isRunning;
             if (BtnSave != null) BtnSave.IsEnabled = isRunning;
-            if (BtnOpenSnapshots != null) BtnOpenSnapshots.IsEnabled = isRunning;
+            if (BtnOpenSnapshots != null) BtnOpenSnapshots.IsEnabled = true; // always enabled
         }
 
         private void RenderNoSignalFrames()
@@ -841,6 +843,9 @@ namespace VideoStreamPlayer
             _liveCapture.Reassembler.ResetAll();
             _liveCapture.ClearAvtpFrame();
 
+            // Update button enabled states to reflect new mode (e.g. Load Files disabled in AVTP Live)
+            ApplyButtonStates(isRunning: false);
+
             LblStatus.Text = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor
                 ? "Mode: AVTP Live (Monitoring). Press Start to listen/capture live stream."
                 : "Mode: Generator/Player (Files). Load a file and press Start.";
@@ -1273,12 +1278,11 @@ namespace VideoStreamPlayer
                 }
                 else
                 {
-                    // Crop/copy the relevant region from the 320×80 AVTP frame
+                    // Linear copy: Nichia data is linearly packed in the first
+                    // w*h bytes of the AVTP frame (CANoe linear padding convention).
                     var cropped = new byte[w * h];
-                    int copyW = Math.Min(w, avtpW);
-                    int copyH = Math.Min(h, firstFrame.Length / avtpW);
-                    for (int y = 0; y < copyH; y++)
-                        Buffer.BlockCopy(firstFrame, y * avtpW, cropped, y * w, copyW);
+                    int copyLen = Math.Min(w * h, firstFrame.Length);
+                    Buffer.BlockCopy(firstFrame, 0, cropped, 0, copyLen);
                     _pgmFrame = cropped;
                 }
 

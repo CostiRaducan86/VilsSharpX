@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +24,11 @@ public sealed class AviTripletRecorder : IDisposable
 
     private readonly string? _compareReportPath;
 
+    // File paths – exposed so that the fps header can be patched after recording.
+    private readonly string _pathA;
+    private readonly string _pathB;
+    private readonly string _pathD;
+
     private readonly AviWriter _writerA;
     private readonly IAviVideoStream _streamA;
     private readonly AviWriter _writerB;
@@ -34,6 +40,7 @@ public sealed class AviTripletRecorder : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _worker;
 
+    // All streams: uncompressed (lossless, pixel-perfect for traces).
     private readonly byte[] _a8;
     private readonly byte[] _b8;
     private readonly byte[] _d32;
@@ -42,7 +49,21 @@ public sealed class AviTripletRecorder : IDisposable
     private byte[]? _lastBForReport;
     private int _lastFrameNrForReport;
 
-    public AviTripletRecorder(string pathA, string pathB, string pathD, int width, int height, int fps, int queueCapacity = 300, string? compareCsvPath = null, byte compareDeadband = 0)
+    // Actual-fps measurement: used to patch the AVI header after recording.
+    private readonly Stopwatch _recSw = new();
+    private int _frameCount;
+
+    /// <summary>The measured frames-per-second after Dispose (based on wall-clock time).</summary>
+    public double ActualFps { get; private set; }
+
+    /// <summary>Paths of the three AVI files created by this recorder.</summary>
+    public (string A, string B, string D) FilePaths => (_pathA, _pathB, _pathD);
+
+    public AviTripletRecorder(string pathA, string pathB, string pathD,
+        int width, int height, int fps,
+        int queueCapacity = 300,
+        string? compareCsvPath = null,
+        byte compareDeadband = 0)
     {
         if (string.IsNullOrWhiteSpace(pathA)) throw new ArgumentException("Path is required", nameof(pathA));
         if (string.IsNullOrWhiteSpace(pathB)) throw new ArgumentException("Path is required", nameof(pathB));
@@ -51,6 +72,10 @@ public sealed class AviTripletRecorder : IDisposable
         EnsureParentDirExists(pathA);
         EnsureParentDirExists(pathB);
         EnsureParentDirExists(pathD);
+
+        _pathA = pathA;
+        _pathB = pathB;
+        _pathD = pathD;
 
         _width = width;
         _height = height;
@@ -66,6 +91,7 @@ public sealed class AviTripletRecorder : IDisposable
         _b8 = new byte[_stride8 * height];
         _d32 = new byte[_stride32 * height];
 
+        // All three streams: uncompressed (lossless, pixel-perfect traces).
         _writerA = CreateGray8Writer(pathA, fps, out _streamA);
         _writerB = CreateGray8Writer(pathB, fps, out _streamB);
         _writerD = CreateBgr32Writer(pathD, fps, out _streamD);
@@ -93,12 +119,53 @@ public sealed class AviTripletRecorder : IDisposable
         try { _cts.Cancel(); } catch { }
         try { _worker.Wait(TimeSpan.FromSeconds(2)); } catch { }
 
+        // Compute actual fps from wall-clock measurement.
+        double elapsedSec = _recSw.Elapsed.TotalSeconds;
+        ActualFps = elapsedSec > 0.01 && _frameCount > 1
+            ? (_frameCount - 1) / elapsedSec   // intervals = frames - 1
+            : 0;
+
         try { _writerA.Close(); } catch { }
         try { _writerB.Close(); } catch { }
         try { _writerD.Close(); } catch { }
 
         _cts.Dispose();
         _queue.Dispose();
+
+        // Patch the AVI header with the measured fps so playback speed matches reality.
+        if (ActualFps > 0.5)
+        {
+            try { PatchAviFps(_pathA, ActualFps); } catch { }
+            try { PatchAviFps(_pathB, ActualFps); } catch { }
+            try { PatchAviFps(_pathD, ActualFps); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Binary-patches the <c>microSecPerFrame</c> DWORD in an AVI file header (offset 32)
+    /// so that playback speed reflects the measured recording rate.
+    /// </summary>
+    public static void PatchAviFps(string path, double actualFps)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path) || actualFps <= 0)
+            return;
+
+        uint microSecPerFrame = (uint)Math.Round(1_000_000.0 / actualFps);
+        if (microSecPerFrame == 0) microSecPerFrame = 1;
+
+        // AVI layout: RIFF(4) size(4) AVI (4) LIST(4) size(4) hdrl(4) avih(4) size(4) → offset 32 = microSecPerFrame
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        if (fs.Length < 36) return;
+
+        // Verify RIFF/AVI
+        var magic = new byte[12];
+        fs.Read(magic, 0, 12);
+        if (System.Text.Encoding.ASCII.GetString(magic, 0, 4) != "RIFF") return;
+        if (System.Text.Encoding.ASCII.GetString(magic, 8, 4) != "AVI ") return;
+
+        fs.Position = 32;
+        var buf = BitConverter.GetBytes(microSecPerFrame);
+        fs.Write(buf, 0, 4);
     }
 
     public static void SaveSingleFrameCompareXlsx(
@@ -130,8 +197,7 @@ public sealed class AviTripletRecorder : IDisposable
             EmitIndex1 = true
         };
 
-        // SharpAvi supports uncompressed 8bpp streams; a grayscale palette is implied.
-        // Uncompressed streams expect bottom-up DIB-style frames.
+        // Uncompressed 8bpp bottom-up DIB – lossless, pixel-perfect.
         stream = writer.AddVideoStream(_width, _height, BitsPerPixel.Bpp8);
         stream.Codec = CodecIds.Uncompressed;
         return writer;
@@ -145,9 +211,12 @@ public sealed class AviTripletRecorder : IDisposable
             EmitIndex1 = true
         };
 
-        // Encoding streams expect TOP-DOWN BGR32 input frames.
-        // Uncompressed encoder (very compatible, but large).
-        stream = writer.AddEncodingVideoStream(new UncompressedVideoEncoder(_width, _height), ownsEncoder: true, width: _width, height: _height);
+        // Uncompressed BGR32 bottom-up DIB – lossless.
+        stream = writer.AddEncodingVideoStream(
+            new UncompressedVideoEncoder(_width, _height),
+            ownsEncoder: true,
+            width: _width,
+            height: _height);
         return writer;
     }
 
@@ -161,12 +230,18 @@ public sealed class AviTripletRecorder : IDisposable
                 if (set.BGray.Length < _width * _height) continue;
                 if (set.DBgrTopDown.Length < _stride24 * _height) continue;
 
+                // Start the stopwatch on the very first frame.
+                if (_frameCount == 0) _recSw.Start();
+                _frameCount++;
+
                 _lastAForReport = set.AGray;
                 _lastBForReport = set.BGray;
                 _lastFrameNrForReport++;
 
+                // A/B: Gray8 → bottom-up DIB (lossless).
                 Gray8ToGray8BottomUp(set.AGray, _a8, _width, _height, _stride8);
                 Gray8ToGray8BottomUp(set.BGray, _b8, _width, _height, _stride8);
+                // D: BGR24 → BGR32 top-down (UncompressedVideoEncoder handles DIB flip).
                 Bgr24ToBgr32TopDown(set.DBgrTopDown, _d32, _width, _height);
 
                 _streamA.WriteFrame(true, _a8, 0, _a8.Length);
@@ -180,6 +255,8 @@ public sealed class AviTripletRecorder : IDisposable
         }
         finally
         {
+            _recSw.Stop();
+
             try
             {
                 if (_compareReportPath != null)
@@ -205,6 +282,9 @@ public sealed class AviTripletRecorder : IDisposable
 
     private static int AlignTo4(int x) => (x + 3) & ~3;
 
+    /// <summary>
+    /// Flips Gray8 top-down to bottom-up DIB layout with stride alignment.
+    /// </summary>
     private static void Gray8ToGray8BottomUp(byte[] grayTopDown, byte[] dstGrayBottomUp, int w, int h, int dstStride)
     {
         if (dstStride < w) throw new ArgumentOutOfRangeException(nameof(dstStride));
@@ -216,6 +296,28 @@ public sealed class AviTripletRecorder : IDisposable
 
             Buffer.BlockCopy(grayTopDown, srcRow, dstGrayBottomUp, dstRow, w);
             for (int i = w; i < dstStride; i++) dstGrayBottomUp[dstRow + i] = 0;
+        }
+    }
+
+    /// <summary>
+    /// Converts a Gray8 top-down buffer to BGR32 top-down (R=G=B=gray, A=0).
+    /// </summary>
+    private static void Gray8ToBgr32TopDown(byte[] grayTopDown, byte[] dstBgr32, int w, int h)
+    {
+        int stride32 = w * 4;
+        for (int y = 0; y < h; y++)
+        {
+            int srcRow = y * w;
+            int dstRow = y * stride32;
+            for (int x = 0; x < w; x++)
+            {
+                byte g = grayTopDown[srcRow + x];
+                int di = dstRow + x * 4;
+                dstBgr32[di + 0] = g; // B
+                dstBgr32[di + 1] = g; // G
+                dstBgr32[di + 2] = g; // R
+                dstBgr32[di + 3] = 0; // X
+            }
         }
     }
 
@@ -370,6 +472,9 @@ public sealed class AviTripletRecorder : IDisposable
         return Path.ChangeExtension(path, ".xlsx");
     }
 
+    /// <summary>
+    /// Converts BGR24 top-down source to BGR32 top-down (suitable for encoding streams).
+    /// </summary>
     private static void Bgr24ToBgr32TopDown(byte[] srcBgr24TopDown, byte[] dstBgr32TopDown, int w, int h)
     {
         int srcStride = w * 3;
@@ -384,6 +489,27 @@ public sealed class AviTripletRecorder : IDisposable
                 dstBgr32TopDown[di++] = srcBgr24TopDown[si++]; // G
                 dstBgr32TopDown[di++] = srcBgr24TopDown[si++]; // R
                 dstBgr32TopDown[di++] = 0; // X
+            }
+        }
+    }
+
+    /// <summary>
+    /// Converts BGR24 top-down source to BGR32 bottom-up DIB (for uncompressed AVI).
+    /// </summary>
+    private static void Bgr24ToBgr32BottomUp(byte[] srcBgr24TopDown, byte[] dstBgr32BottomUp, int w, int h)
+    {
+        int srcStride = w * 3;
+        int dstStride = w * 4;
+        for (int y = 0; y < h; y++)
+        {
+            int si = y * srcStride;
+            int di = (h - 1 - y) * dstStride;
+            for (int x = 0; x < w; x++)
+            {
+                dstBgr32BottomUp[di++] = srcBgr24TopDown[si++]; // B
+                dstBgr32BottomUp[di++] = srcBgr24TopDown[si++]; // G
+                dstBgr32BottomUp[di++] = srcBgr24TopDown[si++]; // R
+                dstBgr32BottomUp[di++] = 0; // X
             }
         }
     }

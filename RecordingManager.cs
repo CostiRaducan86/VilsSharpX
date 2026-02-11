@@ -65,12 +65,28 @@ namespace VideoStreamPlayer
         public string StopRecording()
         {
             _isRecording = false;
+            double actualFps = 0;
+            if (_recorder != null)
+            {
+                try
+                {
+                    actualFps = _recorder.ActualFps;
+                }
+                catch { }
+            }
             try { _recorder?.Dispose(); } catch { }
+
+            // After Dispose, ActualFps is updated and AVI headers are patched.
+            if (_recorder != null && actualFps <= 0)
+            {
+                try { actualFps = _recorder.ActualFps; } catch { }
+            }
             _recorder = null;
 
+            string fpsInfo = actualFps > 0 ? $" Actual fps: {actualFps:F1}" : "";
             return _recordDropped > 0
-                ? $"Recording stopped. Dropped frames (queue full): {_recordDropped}"
-                : "Recording stopped.";
+                ? $"Recording stopped. Dropped frames (queue full): {_recordDropped}.{fpsInfo}"
+                : $"Recording stopped.{fpsInfo}";
         }
 
         /// <summary>

@@ -3,17 +3,27 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace VideoStreamPlayer;
 
+/// <summary>
+/// Reads AVI files containing either uncompressed or MJPEG-compressed video frames
+/// and exposes them as Gray8 top-down bitmaps.
+/// </summary>
 internal sealed class AviUncompressedVideoReader : IDisposable
 {
+    // FourCC for MJPEG: 'M'(0x4D) 'J'(0x4A) 'P'(0x50) 'G'(0x47) → little-endian 0x47504A4D
+    private const uint FOURCC_MJPG = 0x47504A4D;
+
     private readonly FileStream _fs;
     private readonly BinaryReader _br;
 
     private readonly List<IndexEntry> _frames;
     private readonly long _moviDataStart;
     private readonly int _streamIndex;
+    private readonly bool _isMjpeg;
 
     public string Path { get; }
     public int Width { get; }
@@ -36,7 +46,8 @@ internal sealed class AviUncompressedVideoReader : IDisposable
         int bitsPerPixel,
         int sourceStride,
         bool bottomUp,
-        double frameDurationMs)
+        double frameDurationMs,
+        bool isMjpeg)
     {
         Path = path;
         _fs = fs;
@@ -50,6 +61,7 @@ internal sealed class AviUncompressedVideoReader : IDisposable
         SourceStride = sourceStride;
         BottomUp = bottomUp;
         FrameDurationMs = frameDurationMs;
+        _isMjpeg = isMjpeg;
     }
 
     public static AviUncompressedVideoReader Open(string path)
@@ -251,8 +263,9 @@ internal sealed class AviUncompressedVideoReader : IDisposable
             if (idx.Count == 0)
                 throw new InvalidDataException("AVI: missing/empty idx1; only indexed AVIs are supported (EmitIndex1=true).");
 
-            if (compression != 0)
-                throw new InvalidDataException($"AVI: only uncompressed video is supported (compression={compression}).");
+            bool isMjpeg = compression == FOURCC_MJPG;
+            if (compression != 0 && !isMjpeg)
+                throw new InvalidDataException($"AVI: unsupported compression (0x{compression:X8}). Supported: uncompressed, MJPG.");
 
             if (width <= 0 || height == 0 || bitsPerPixel == 0)
                 throw new InvalidDataException("AVI: missing/invalid BITMAPINFOHEADER.");
@@ -260,7 +273,7 @@ internal sealed class AviUncompressedVideoReader : IDisposable
             bool bottomUp = height > 0;
             int absH = Math.Abs(height);
 
-            int bytesPerPixel = bitsPerPixel switch
+            int bytesPerPixel = isMjpeg ? 4 : bitsPerPixel switch
             {
                 8 => 1,
                 24 => 3,
@@ -268,14 +281,14 @@ internal sealed class AviUncompressedVideoReader : IDisposable
                 _ => throw new InvalidDataException($"AVI: unsupported BitsPerPixel={bitsPerPixel}. Supported: 8/24/32.")
             };
 
-            int stride = AlignTo4(width * bytesPerPixel);
+            int stride = isMjpeg ? AlignTo4(width * 4) : AlignTo4(width * bytesPerPixel);
 
             double frameMs = microSecPerFrame > 0 ? microSecPerFrame / 1000.0 : 40.0;
             if (frameMs < 1.0) frameMs = 1.0;
 
             // Keep idx entries in file order.
             int streamIndex = selectedStreamIndex ?? 0;
-            return new AviUncompressedVideoReader(path, fs, br, idx, moviDataStart, streamIndex, width, absH, bitsPerPixel, stride, bottomUp, frameMs);
+            return new AviUncompressedVideoReader(path, fs, br, idx, moviDataStart, streamIndex, width, absH, bitsPerPixel, stride, bottomUp, frameMs, isMjpeg);
         }
         catch
         {
@@ -307,6 +320,14 @@ internal sealed class AviUncompressedVideoReader : IDisposable
 
         // Convert/crop to Gray8 top-down
         var dst = new byte[cropW * cropH];
+
+        // ── MJPEG path: decode the JPEG blob with WPF and extract Gray8 ──
+        if (_isMjpeg)
+        {
+            return DecodeMjpegToGray8TopDown(raw, cropW, cropH);
+        }
+
+        // ── Uncompressed path ──
 
         int srcW = Width;
         int srcH = Height;
@@ -343,6 +364,41 @@ internal sealed class AviUncompressedVideoReader : IDisposable
                 if (gray > 255) gray = 255;
                 dst[dstRow + x] = (byte)gray;
             }
+        }
+
+        return dst;
+    }
+
+    /// <summary>
+    /// Decodes an MJPEG frame (raw JPEG bytes) to Gray8 top-down using WPF imaging.
+    /// </summary>
+    private static byte[] DecodeMjpegToGray8TopDown(byte[] jpegData, int cropW, int cropH)
+    {
+        var dst = new byte[cropW * cropH];
+
+        using var ms = new MemoryStream(jpegData);
+        var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        if (decoder.Frames.Count == 0) return dst;
+
+        BitmapSource frame = decoder.Frames[0];
+
+        // Convert to Gray8 if needed.
+        if (frame.Format != PixelFormats.Gray8)
+            frame = new FormatConvertedBitmap(frame, PixelFormats.Gray8, null, 0);
+
+        int srcW = frame.PixelWidth;
+        int srcH = frame.PixelHeight;
+        int copyW = Math.Min(cropW, srcW);
+        int copyH = Math.Min(cropH, srcH);
+        int srcStride = srcW; // Gray8 stride = width
+        var pixels = new byte[srcStride * srcH];
+        frame.CopyPixels(pixels, srcStride, 0);
+
+        for (int y = 0; y < copyH; y++)
+        {
+            int srcRow = y * srcStride;
+            int dstRow = y * cropW;
+            Buffer.BlockCopy(pixels, srcRow, dst, dstRow, copyW);
         }
 
         return dst;

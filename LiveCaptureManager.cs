@@ -28,7 +28,11 @@ namespace VideoStreamPlayer
 
     private int _activeFeed = (int)Feed.None;
 
-    // AVTP frame buffer (320x80 max)
+    // Display resolution (may differ from AVTP protocol resolution for Nichia)
+    private readonly int _displayWidth;
+    private readonly int _displayHeight;
+
+    // AVTP frame buffer – always at display resolution (cropped from 320×80 if needed)
     private byte[] _avtpFrame;
     private bool _hasAvtpFrame;
     private DateTime _lastAvtpFrameUtc = DateTime.MinValue;
@@ -41,8 +45,13 @@ namespace VideoStreamPlayer
 
     public LiveCaptureManager(int width, int height, double signalLostTimeoutSec, Action<string> log)
     {
+        _displayWidth = width;
+        _displayHeight = height;
+
+        // AVTP protocol always uses 320×80 regardless of display device.
+        // The reassembler must match the chunk dimensions produced by AvtpLiveCapture.
         _avtpFrame = new byte[width * height];
-        _rvf = new RvfReassembler(width, height);
+        _rvf = new RvfReassembler(RvfReassembler.W, RvfReassembler.H);
         _liveSignalLostTimeout = TimeSpan.FromSeconds(signalLostTimeoutSec);
         _log = log ?? (_ => { });
 
@@ -284,16 +293,37 @@ namespace VideoStreamPlayer
 
         private void OnRvfFrameReady(byte[] frame, FrameMeta meta)
         {
-            // Store the frame in our buffer
-            if (frame.Length <= _avtpFrame.Length)
+            // AVTP protocol frame is always 320×80 (25,600 bytes).
+            // For Nichia (256×64), the image data is linearly packed in the first
+            // displayW*displayH bytes of the AVTP buffer (CANoe linear padding convention).
+            int avtpW = RvfReassembler.W;
+            int avtpH = RvfReassembler.H;
+            byte[] displayFrame;
+
+            if (_displayWidth == avtpW && _displayHeight == avtpH)
             {
-                Buffer.BlockCopy(frame, 0, _avtpFrame, 0, Math.Min(frame.Length, _avtpFrame.Length));
+                displayFrame = frame;
+            }
+            else
+            {
+                // Linear copy: first displayW*displayH bytes contain the image
+                // with stride=displayWidth (not grid-aligned to 320-byte rows).
+                int displayBytes = _displayWidth * _displayHeight;
+                displayFrame = new byte[displayBytes];
+                int copyLen = Math.Min(displayBytes, frame.Length);
+                Buffer.BlockCopy(frame, 0, displayFrame, 0, copyLen);
+            }
+
+            // Store the cropped frame in our buffer
+            if (displayFrame.Length <= _avtpFrame.Length)
+            {
+                Buffer.BlockCopy(displayFrame, 0, _avtpFrame, 0, displayFrame.Length);
                 Volatile.Write(ref _hasAvtpFrame, true);
                 _lastAvtpFrameUtc = DateTime.UtcNow;
             }
 
-            // Forward to subscribers
-            OnFrameReady?.Invoke(frame, meta);
+            // Forward to subscribers (at display resolution)
+            OnFrameReady?.Invoke(displayFrame, meta);
         }
 
         public void Dispose()
