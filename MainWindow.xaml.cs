@@ -744,6 +744,13 @@ namespace VideoStreamPlayer
                     _ => LsmDeviceType.Osram20
                 };
 
+                // If saved device type differs from default Osram20 used in constructor,
+                // reinitialize all resolution-dependent objects to match the saved resolution.
+                if (_currentDeviceType != LsmDeviceType.Osram20)
+                {
+                    ReinitializeForNewResolution();
+                }
+
                 if (TxtFps != null) TxtFps.Text = s.Fps.ToString();
                 if (TxtBDelta != null) TxtBDelta.Text = s.BDelta.ToString();
                 if (SldDiffThr != null) SldDiffThr.Value = s.Deadband;
@@ -768,6 +775,11 @@ namespace VideoStreamPlayer
                 UpdateLiveUiEnabledState();
 
                 RenderAll();
+
+                // Update status text with the correct (possibly reinitialized) resolution
+                int w = GetCurrentWidth();
+                int h = GetCurrentHeight();
+                LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}\u00d7{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
             }
             finally
             {
