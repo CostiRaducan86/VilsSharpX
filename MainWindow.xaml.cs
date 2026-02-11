@@ -58,6 +58,9 @@ namespace VideoStreamPlayer
         private int _currentWidth = DefaultW;
         private int _currentHeight = DefaultH;
 
+        // Loop playback flag for AVI/PCAP sources
+        private volatile bool _loopPlayingEnabled = false;
+
         /// <summary>
         /// Gets the active frame width for the currently selected device type.
         /// </summary>
@@ -1025,6 +1028,12 @@ namespace VideoStreamPlayer
             StopAll();
         }
 
+        private void ChkLoopPlaying_Changed(object sender, RoutedEventArgs e)
+        {
+            _loopPlayingEnabled = ChkLoopPlaying?.IsChecked == true;
+            _aviPlayer.LoopEnabled = _loopPlayingEnabled;
+        }
+
         private void BtnRecord_Click(object sender, RoutedEventArgs e)
         {
             if (_recordingManager.IsRecording) StopRecording();
@@ -1246,6 +1255,9 @@ namespace VideoStreamPlayer
             _lastLoadedPcapPath = path;
             LblStatus.Text = SourceLoaderHelper.GetPcapStatusMessage();
 
+            // Show Loop checkbox for PCAP files
+            if (ChkLoopPlaying != null) ChkLoopPlaying.Visibility = Visibility.Visible;
+
             // Extract the first AVTP/RVF frame from the PCAP for preview on pane A
             var firstFrame = PcapAvtpRvfReplay.ExtractFirstFrame(path);
             if (firstFrame != null)
@@ -1279,6 +1291,9 @@ namespace VideoStreamPlayer
         {
             PrepareForNewSource(clearAvtpFrame: true);
 
+            // Hide Loop checkbox for image files
+            if (ChkLoopPlaying != null) ChkLoopPlaying.Visibility = Visibility.Collapsed;
+
             var result = _sourceLoader.LoadImage(path);
             _pgmFrame = result.Frame;
             _lvdsFrame84 = result.LvdsFrame;
@@ -1292,9 +1307,13 @@ namespace VideoStreamPlayer
         private void LoadAvi(string path)
         {
             PrepareForNewSource(clearAvtpFrame: true);
+            _aviPlayer.LoopEnabled = _loopPlayingEnabled;
             _aviPlayer.Load(path);
             _lastLoaded = LoadedSource.Avi;
             LblStatus.Text = _aviPlayer.BuildStatusMessage();
+
+            // Show Loop checkbox for AVI files
+            if (ChkLoopPlaying != null) ChkLoopPlaying.Visibility = Visibility.Visible;
 
             if (_playback.Cts == null || _playback.IsPaused) RenderOneFrameNow();
         }
@@ -1423,11 +1442,20 @@ namespace VideoStreamPlayer
                 _playback.PauseGate,
                 onComplete: () =>
                 {
-                    // Auto-stop after replay: show idle gradient and reset UI.
                     Dispatcher.Invoke(() =>
                     {
-                        if (_lastLoaded == LoadedSource.Pcap)
+                        if (_lastLoaded != LoadedSource.Pcap) return;
+
+                        if (_loopPlayingEnabled && !string.IsNullOrWhiteSpace(_lastLoadedPcapPath))
+                        {
+                            // Loop: restart the PCAP replay from the beginning
+                            StartPcapReplay(_lastLoadedPcapPath);
+                        }
+                        else
+                        {
+                            // No loop: stop
                             StopAll();
+                        }
                     });
                 },
                 onError: msg =>
@@ -1616,6 +1644,9 @@ namespace VideoStreamPlayer
             _liveCapture.ClearAvtpFrame();
             _lastLoadedPcapPath = null;
 
+            // Hide Loop checkbox for scene files
+            if (ChkLoopPlaying != null) ChkLoopPlaying.Visibility = Visibility.Collapsed;
+
             _scenePlayer.Load(scenePath);
             _lastLoaded = LoadedSource.Scene;
 
@@ -1721,6 +1752,13 @@ namespace VideoStreamPlayer
                         await _txManager.SendFrameAsync(a.Data, ct);
                     }
                     catch (OperationCanceledException) { break; }
+                }
+
+                // Detect AVI end-of-file when loop is disabled → auto-stop
+                if (_lastLoaded == LoadedSource.Avi && _aviPlayer.IsAtEnd)
+                {
+                    _ = Dispatcher.BeginInvoke(() => StopAll());
+                    break;
                 }
         
                 // If pause was activated exactly during the iteration, do not publish frame

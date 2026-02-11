@@ -144,6 +144,10 @@
                 <Button x:Name="BtnRecord" Content="Record" Click="BtnRecord_Click" Padding="10,4" Margin="0,0,6,0" />
                 <Button x:Name="BtnStop" Content="Stop" Click="BtnStop_Click" Padding="10,4" Margin="0,0,0,0" />
 
+                <!-- Loop checkbox (visible only for AVI/PCAP) -->
+                <CheckBox x:Name="ChkLoopPlaying" Content="Loop playing" VerticalAlignment="Center" Margin="12,0,0,0"
+                          Visibility="Collapsed" IsChecked="False" Checked="ChkLoopPlaying_Changed" Unchecked="ChkLoopPlaying_Changed" />
+
                 <!-- Separate action: Save (placed to the right, with a vertical separator) -->
                 <Rectangle Width="1" Height="26" Fill="Gray" Margin="12,0,12,0" VerticalAlignment="Center" />
                 <Button x:Name="BtnSave" Content="Save" Click="BtnSaveReport_Click" Padding="10,4" />

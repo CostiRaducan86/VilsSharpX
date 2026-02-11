@@ -16,7 +16,7 @@ namespace VideoStreamPlayer
         private string? _aviPath;
         private int _aviIndex;
         private DateTime _aviNextSwitchUtc;
-        private bool _aviLoopEnabled = true;
+        private bool _aviLoopEnabled = false;
         private byte[]? _aviCurrentFrame;
 
         // AVI "source fps" estimation
@@ -42,6 +42,11 @@ namespace VideoStreamPlayer
         public bool LoopEnabled { get => _aviLoopEnabled; set => _aviLoopEnabled = value; }
         public double SourceFpsEma => _aviSourceFpsEma;
         public byte[]? CurrentFrame => _aviCurrentFrame;
+
+        /// <summary>
+        /// Returns true when the AVI has reached its last frame and looping is disabled.
+        /// </summary>
+        public bool IsAtEnd => !_aviLoopEnabled && _avi != null && _avi.FrameCount > 0 && _aviIndex >= _avi.FrameCount - 1;
 
         public void Load(string path)
         {
