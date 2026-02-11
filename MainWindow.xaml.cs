@@ -1245,6 +1245,34 @@ namespace VideoStreamPlayer
             _lastLoaded = LoadedSource.Pcap;
             _lastLoadedPcapPath = path;
             LblStatus.Text = SourceLoaderHelper.GetPcapStatusMessage();
+
+            // Extract the first AVTP/RVF frame from the PCAP for preview on pane A
+            var firstFrame = PcapAvtpRvfReplay.ExtractFirstFrame(path);
+            if (firstFrame != null)
+            {
+                // AVTP frames are always 320×80; crop to current resolution if needed
+                int w = _currentWidth;
+                int h = _currentHeight;
+                int avtpW = 320;
+
+                if (w == avtpW && firstFrame.Length == w * h)
+                {
+                    _pgmFrame = firstFrame;
+                }
+                else
+                {
+                    // Crop/copy the relevant region from the 320×80 AVTP frame
+                    var cropped = new byte[w * h];
+                    int copyW = Math.Min(w, avtpW);
+                    int copyH = Math.Min(h, firstFrame.Length / avtpW);
+                    for (int y = 0; y < copyH; y++)
+                        Buffer.BlockCopy(firstFrame, y * avtpW, cropped, y * w, copyW);
+                    _pgmFrame = cropped;
+                }
+
+                _lastLoaded = LoadedSource.Pcap;
+                if (_playback.Cts == null || _playback.IsPaused) RenderOneFrameNow();
+            }
         }
 
         private void LoadSingleImage(string path)
@@ -1648,7 +1676,7 @@ namespace VideoStreamPlayer
             return _lastLoaded switch
             {
                 LoadedSource.Image => _pgmFrame,
-                LoadedSource.Pcap => _liveCapture.HasAvtpFrame ? _liveCapture.AvtpFrame : _idleGradientFrame,
+                LoadedSource.Pcap => _liveCapture.HasAvtpFrame ? _liveCapture.AvtpFrame : _pgmFrame,
                 LoadedSource.Avi => _aviPlayer.GetBytesAndUpdateIfNeeded(DateTime.UtcNow, _playback.IsPaused) ?? _idleGradientFrame,
                 LoadedSource.Sequence => GetSequenceBytes() ?? _idleGradientFrame,
                 LoadedSource.Scene => _scenePlayer.GetBytesAndUpdateIfNeeded(DateTime.UtcNow, _playback.IsPaused) ?? _idleGradientFrame,

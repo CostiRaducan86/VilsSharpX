@@ -286,6 +286,134 @@ public static class PcapAvtpRvfReplay
 
     // Parsing is shared with live capture via AvtpRvfParser.
 
+    /// <summary>
+    /// Extracts the first complete AVTP/RVF frame from a PCAP/PCAPNG file.
+    /// Returns a 320×80 (25600-byte) Gray8 frame, or null if no complete frame found.
+    /// </summary>
+    public static byte[]? ExtractFirstFrame(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+
+        const int frameW = W;
+        const int frameH = H;
+        const int frameSize = frameW * frameH; // 25600
+        var frame = new byte[frameSize];
+        bool gotAny = false;
+
+        // Simple callback-based assembly: just collect lines into the frame buffer
+        void OnChunk(int line1, bool endFrame, byte[] payload)
+        {
+            int lineIdx = line1 - 1; // 1-based → 0-based
+            if (lineIdx < 0 || lineIdx >= frameH) return;
+            int numLines = Math.Min(NumLines, frameH - lineIdx);
+            int copyLen = Math.Min(payload.Length, numLines * frameW);
+            Buffer.BlockCopy(payload, 0, frame, lineIdx * frameW, copyLen);
+            gotAny = true;
+        }
+
+        try
+        {
+            using var fs = File.OpenRead(path);
+            uint first = ReadU32LE(fs);
+            fs.Position = 0;
+
+            if (first == 0x0A0D0D0Au)
+                ExtractFirstFramePcapNg(fs, OnChunk);
+            else
+                ExtractFirstFramePcap(fs, OnChunk);
+        }
+        catch
+        {
+            // If anything goes wrong during parsing, return what we have (or null)
+        }
+
+        return gotAny ? frame : null;
+    }
+
+    private static void ExtractFirstFramePcap(Stream fs, Action<int, bool, byte[]> onChunk)
+    {
+        uint magic = ReadU32LE(fs);
+        bool swap = (magic == 0xD4C3B2A1u || magic == 0x4D3CB2A1u);
+        if (magic != 0xA1B2C3D4u && magic != 0xA1B23C4Du
+            && magic != 0xD4C3B2A1u && magic != 0x4D3CB2A1u)
+            return;
+
+        // skip rest of global header (20 bytes after magic)
+        fs.Position = 24;
+
+        while (fs.Position < fs.Length)
+        {
+            if (!TryReadPacketHeader(fs, swap, out _, out _, out uint inclLen)) break;
+            byte[] data = new byte[inclLen];
+            ReadExactly(fs, data);
+
+            if (AvtpRvfParser.TryParseAvtpRvfEthernet(data, out var line1, out var endFrame, out var payload))
+            {
+                onChunk(line1, endFrame, payload);
+                if (endFrame) return; // first frame complete
+            }
+        }
+    }
+
+    private static void ExtractFirstFramePcapNg(Stream fs, Action<int, bool, byte[]> onChunk)
+    {
+        while (fs.Position < fs.Length)
+        {
+            uint blockType = ReadU32LE(fs);
+            uint totalLen = ReadU32LE(fs);
+            if (totalLen < 12) return;
+            long blockStart = fs.Position - 8;
+            int bodyLen = checked((int)totalLen - 12);
+
+            switch (blockType)
+            {
+                case 0x0A0D0D0Au: // SHB
+                case 0x00000001u: // IDB
+                    fs.Position += bodyLen;
+                    break;
+
+                case 0x00000006u: // EPB
+                    {
+                        byte[] hdr = new byte[20];
+                        ReadExactly(fs, hdr);
+                        uint capLen = ReadU32LE(hdr, 12);
+                        byte[] packet = new byte[capLen];
+                        ReadExactly(fs, packet);
+                        fs.Position = blockStart + totalLen - 4; // skip to trailing len
+
+                        if (AvtpRvfParser.TryParseAvtpRvfEthernet(packet, out var line1, out var endFrame, out var payload))
+                        {
+                            onChunk(line1, endFrame, payload);
+                            if (endFrame) { ReadU32LE(fs); return; }
+                        }
+                        break;
+                    }
+
+                case 0x00000003u: // SPB
+                    {
+                        _ = ReadU32LE(fs); // origLen
+                        int capLen = bodyLen - 4;
+                        byte[] packet = new byte[capLen];
+                        ReadExactly(fs, packet);
+
+                        if (AvtpRvfParser.TryParseAvtpRvfEthernet(packet, out var line1, out var endFrame, out var payload))
+                        {
+                            onChunk(line1, endFrame, payload);
+                            if (endFrame) { ReadU32LE(fs); return; }
+                        }
+                        break;
+                    }
+
+                default:
+                    fs.Position += bodyLen;
+                    break;
+            }
+
+            // trailing total length
+            ReadU32LE(fs);
+        }
+    }
+
     private static async Task DelayByTimestampAsync(long? lastTsUs, long tsUs, double speed, CancellationToken ct)
     {
         if (!lastTsUs.HasValue) return;
