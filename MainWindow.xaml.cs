@@ -358,6 +358,23 @@ namespace VideoStreamPlayer
             }
         }
 
+        /// <summary>
+        /// Sets button enabled/disabled state based on whether playback is running.
+        /// When stopped: Load Files + Start enabled; Prev/Next/Record/Stop/Save/OpenFolder disabled.
+        /// When running: Start(Pause) + Prev/Next/Record/Stop/Save/OpenFolder enabled; Load Files disabled.
+        /// </summary>
+        private void ApplyButtonStates(bool isRunning)
+        {
+            if (BtnLoadFiles != null) BtnLoadFiles.IsEnabled = !isRunning;
+            if (BtnStart != null) BtnStart.IsEnabled = true; // always enabled (Start or Pause/Resume)
+            if (BtnPrev != null) BtnPrev.IsEnabled = isRunning;
+            if (BtnNext != null) BtnNext.IsEnabled = isRunning;
+            if (BtnRecord != null) BtnRecord.IsEnabled = isRunning;
+            if (BtnStop != null) BtnStop.IsEnabled = isRunning;
+            if (BtnSave != null) BtnSave.IsEnabled = isRunning;
+            if (BtnOpenSnapshots != null) BtnOpenSnapshots.IsEnabled = isRunning;
+        }
+
         private void RenderNoSignalFrames()
         {
             BitmapUtils.Blit(_wbA, _noSignalGrayFrame, _currentWidth);
@@ -674,6 +691,9 @@ namespace VideoStreamPlayer
 
             // Startup should show "Signal not available".
             ApplyNoSignalUiState(noSignal: true);
+
+            // Default button states: Load Files + Start enabled; others disabled
+            ApplyButtonStates(false);
         }
 
         private void HandleLiveFrameReady(FrameMeta meta)
@@ -969,6 +989,7 @@ namespace VideoStreamPlayer
             {
                 Start(fps);
                 if (BtnStart != null) BtnStart.Content = "Pause";
+                ApplyButtonStates(true);
                 return;
             }
 
@@ -1439,6 +1460,9 @@ namespace VideoStreamPlayer
             ClearOverlay(Pane.A);
             ClearOverlay(Pane.B);
             ClearOverlay(Pane.D);
+
+            // Restore button states: Load Files + Start enabled; others disabled
+            ApplyButtonStates(false);
         }
 
         private static void AppendUdpLog(string message) => DiagnosticLogger.Log(message);
@@ -1597,7 +1621,18 @@ namespace VideoStreamPlayer
                     _pausedD = d;
                 }
             }
-            RenderAll();
+
+            if (_playback.Cts != null)
+            {
+                // Playback is active — use full RenderAll which handles Live/paused/recording logic
+                RenderAll();
+            }
+            else
+            {
+                // Not yet started — render preview on pane A only; B and D keep "Signal not available"
+                BitmapUtils.Blit(_wbA, a.Data, a.Stride);
+                if (NoSignalA != null) NoSignalA.Visibility = Visibility.Collapsed;
+            }
 
             if (_playback.IsPaused)
                 UpdateOverlaysAll();

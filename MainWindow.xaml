@@ -134,19 +134,19 @@
 
             <!-- Buttons directly under panes -->
             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8">
-                <Button Content="Load Files…" Click="BtnLoadFiles_Click" Padding="10,4" />
+                <Button x:Name="BtnLoadFiles" Content="Load Files…" Click="BtnLoadFiles_Click" Padding="10,4" />
                 <Rectangle Width="1" Height="26" Fill="Gray" Margin="12,0,12,0" VerticalAlignment="Center" />
 
                 <!-- Player buttons (keep order): Start Prev Next Record Stop -->
                 <Button x:Name="BtnStart" Content="Start" Click="BtnStart_Click" Padding="10,4" Margin="0,0,6,0"/>
-                <Button Content="Prev" Click="BtnSeqPrev_Click" Padding="10,4" Margin="0,0,6,0"/>
-                <Button Content="Next" Click="BtnSeqNext_Click" Padding="10,4" Margin="0,0,6,0"/>
+                <Button x:Name="BtnPrev" Content="Prev" Click="BtnSeqPrev_Click" Padding="10,4" Margin="0,0,6,0"/>
+                <Button x:Name="BtnNext" Content="Next" Click="BtnSeqNext_Click" Padding="10,4" Margin="0,0,6,0"/>
                 <Button x:Name="BtnRecord" Content="Record" Click="BtnRecord_Click" Padding="10,4" Margin="0,0,6,0" />
-                <Button Content="Stop" Click="BtnStop_Click" Padding="10,4" Margin="0,0,0,0" />
+                <Button x:Name="BtnStop" Content="Stop" Click="BtnStop_Click" Padding="10,4" Margin="0,0,0,0" />
 
                 <!-- Separate action: Save (placed to the right, with a vertical separator) -->
                 <Rectangle Width="1" Height="26" Fill="Gray" Margin="12,0,12,0" VerticalAlignment="Center" />
-                <Button Content="Save" Click="BtnSaveReport_Click" Padding="10,4" />
+                <Button x:Name="BtnSave" Content="Save" Click="BtnSaveReport_Click" Padding="10,4" />
 
                 <Button x:Name="BtnOpenSnapshots" Click="BtnOpenSnapshots_Click" Padding="6,4" Margin="6,0,0,0"
                         ToolTip="Open frameSnapshots folder">
