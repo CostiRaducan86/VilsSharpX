@@ -171,7 +171,8 @@
             <Rectangle Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" 
                        Height="1" Fill="Gray" 
                        VerticalAlignment="Bottom" 
-                       Margin="10,0,10,0" />
+                       Margin="10,0,10,0"
+                       IsHitTestVisible="False" />
 
             <!-- Configuration groups: Hardware | Application Settings | Ethernet -->
             <Grid Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" Margin="0,12,0,8">
