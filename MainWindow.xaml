@@ -264,7 +264,7 @@
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblA" HorizontalAlignment="Center" Foreground="DimGray" />
                 <TextBlock Grid.Row="0" Grid.Column="2" x:Name="LblRunInfoA" HorizontalAlignment="Right" Foreground="DimGray" />
 
-                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgA" Stretch="Uniform"
+                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgA" Stretch="Fill"
                       SnapsToDevicePixels="True"
                       RenderTransformOrigin="0,0"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"
@@ -299,7 +299,7 @@
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblB" HorizontalAlignment="Center" Foreground="DimGray" />
                     <TextBlock Grid.Row="0" Grid.Column="2" x:Name="LblRunInfoB" HorizontalAlignment="Right" Foreground="DimGray" />
 
-                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgB" Stretch="Uniform"
+                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgB" Stretch="Fill"
                       SnapsToDevicePixels="True"
                       RenderTransformOrigin="0,0"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"
@@ -333,7 +333,7 @@
                 <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="Bold" Text="Comparison Monitor (LVDS-AVTP)" />
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblD" HorizontalAlignment="Center" Foreground="DimGray" />
 
-                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgD" Stretch="Uniform"
+                <Image Grid.Row="1" Grid.ColumnSpan="3" x:Name="ImgD" Stretch="Fill"
                       SnapsToDevicePixels="True"
                         RenderTransformOrigin="0,0"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"

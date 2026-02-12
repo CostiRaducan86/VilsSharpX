@@ -70,12 +70,10 @@ public sealed class OverlayRenderer
     {
         double aw = img.ActualWidth;
         double ah = img.ActualHeight;
-        double scale = Math.Min(aw / frame.Width, ah / frame.Height);
-        double dw = frame.Width * scale;
-        double dh = frame.Height * scale;
-        double ox = (aw - dw) / 2.0;
-        double oy = (ah - dh) / 2.0;
-        double pixelOnScreen = scale * zoomScale;
+        // Stretch=Fill => independent X/Y scaling, no letterbox
+        double scaleX = aw / frame.Width;
+        double scaleY = ah / frame.Height;
+        double pixelOnScreen = Math.Min(scaleX, scaleY) * zoomScale;
 
         if (!CanShowLabels(pixelOnScreen, pixelsPerDip, isDiffPane: false))
         {
@@ -129,10 +127,10 @@ public sealed class OverlayRenderer
             int added = 0;
             for (int y = 0; y < frame.Height; y += step)
             {
-                double imgCy = oy + (y + 0.5) * scale;
+                double imgCy = (y + 0.5) * scaleY;
                 for (int x = 0; x < frame.Width; x += step)
                 {
-                    double imgCx = ox + (x + 0.5) * scale;
+                    double imgCx = (x + 0.5) * scaleX;
 
                     Point p;
                     try { p = imgToOverlay.Transform(new Point(imgCx, imgCy)); }
@@ -173,12 +171,10 @@ public sealed class OverlayRenderer
     {
         double aw = img.ActualWidth;
         double ah = img.ActualHeight;
-        double scale = Math.Min(aw / frameA.Width, ah / frameA.Height);
-        double dw = frameA.Width * scale;
-        double dh = frameA.Height * scale;
-        double ox = (aw - dw) / 2.0;
-        double oy = (ah - dh) / 2.0;
-        double pixelOnScreen = scale * zoomScale;
+        // Stretch=Fill => independent X/Y scaling, no letterbox
+        double scaleX = aw / frameA.Width;
+        double scaleY = ah / frameA.Height;
+        double pixelOnScreen = Math.Min(scaleX, scaleY) * zoomScale;
 
         if (!CanShowLabels(pixelOnScreen, pixelsPerDip, isDiffPane: true))
         {
@@ -222,10 +218,10 @@ public sealed class OverlayRenderer
             int added = 0;
             for (int y = 0; y < frameA.Height; y += step)
             {
-                double imgCy = oy + (y + 0.5) * scale;
+                double imgCy = (y + 0.5) * scaleY;
                 for (int x = 0; x < frameA.Width; x += step)
                 {
-                    double imgCx = ox + (x + 0.5) * scale;
+                    double imgCx = (x + 0.5) * scaleX;
 
                     Point p;
                     try { p = imgToOverlay.Transform(new Point(imgCx, imgCy)); }

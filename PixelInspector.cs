@@ -49,20 +49,15 @@ public sealed class PixelInspector
         double ah = img.ActualHeight;
         if (aw <= 1 || ah <= 1) return false;
 
-        // Stretch=Uniform => image may be letterboxed
-        double scale = Math.Min(aw / frame.Width, ah / frame.Height);
-        double dw = frame.Width * scale;
-        double dh = frame.Height * scale;
-        double ox = (aw - dw) / 2.0;
-        double oy = (ah - dh) / 2.0;
+        // Stretch=Fill => image fills entire control, independent X/Y scaling
+        double scaleX = aw / frame.Width;
+        double scaleY = ah / frame.Height;
 
-        double ix = lx - ox;
-        double iy = ly - oy;
-        if (ix < 0 || iy < 0 || ix >= dw || iy >= dh)
+        if (lx < 0 || ly < 0 || lx >= aw || ly >= ah)
             return false;
 
-        x = (int)(ix / scale);
-        y = (int)(iy / scale);
+        x = (int)(lx / scaleX);
+        y = (int)(ly / scaleY);
         if (x < 0 || y < 0 || x >= frame.Width || y >= frame.Height)
             return false;
 
