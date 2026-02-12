@@ -167,81 +167,116 @@
                            MinWidth="220" />
             </StackPanel>
 
-            <!-- Settings / options under buttons -->
-            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,0,8">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
-                    <TextBlock Text="Mode:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="CmbModeOfOperation" Width="170" SelectedIndex="0" SelectionChanged="CmbModeOfOperation_SelectionChanged" Margin="0,0,18,0">
-                        <ComboBoxItem Content="AVTP Live (Monitoring)"/>
-                        <ComboBoxItem Content="Generator/Player (Files)"/>
-                    </ComboBox>
+            <!-- Horizontal separator between buttons and configuration groups -->
+            <Rectangle Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" 
+                       Height="1" Fill="Gray" 
+                       VerticalAlignment="Bottom" 
+                       Margin="10,0,10,0" />
 
-                    <TextBlock Text="NIC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="CmbLiveNic" Width="320" SelectionChanged="CmbLiveNic_SelectionChanged" Margin="0,0,6,0"/>
-                    <Button Content="Refresh" Click="BtnRefreshNics_Click" Padding="8,2" Margin="0,0,18,0"/>
-                </StackPanel>
+            <!-- Configuration groups: Hardware | Application Settings | Ethernet -->
+            <Grid Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" Margin="0,12,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                <GroupBox Header="Settings" Padding="10" Margin="0,0,0,6">
+                <!-- 1. Hardware Configuration -->
+                <GroupBox Grid.Column="0" Header="Hardware Configuration" Padding="10" Margin="0,0,8,0" MinWidth="220">
                     <StackPanel Orientation="Vertical">
-                        <WrapPanel HorizontalAlignment="Center" Margin="0,0,0,8">
-                            <TextBlock Text="FPS:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtFps" Width="60" Text="100" Margin="0,0,18,0"/>
+                        <!-- Mode of Operation -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Mode of Operation:" VerticalAlignment="Center" Width="140" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbModeOfOperation" Width="200" SelectedIndex="0" SelectionChanged="CmbModeOfOperation_SelectionChanged">
+                                <ComboBoxItem Content="AVTP Live (Monitoring)"/>
+                                <ComboBoxItem Content="Generator/Player (Files)"/>
+                            </ComboBox>
+                        </StackPanel>
 
-                            <TextBlock Text="B Δ:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtBDelta" Width="60" Text="0" Margin="0,0,18,0" TextChanged="BDelta_TextChanged"/>
-
-                            <TextBlock Text="Force dead pixel ID:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtDeadPixelId" Width="80" Text="0" TextChanged="TxtDeadPixelId_TextChanged"/>
-                        </WrapPanel>
-
-                        <WrapPanel HorizontalAlignment="Center">
-                            <TextBlock Text="Deviation threshold:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Slider x:Name="SldDiffThr" Minimum="0" Maximum="255" Value="0" Width="220" Margin="0,0,6,0" ValueChanged="SldDiffThr_ValueChanged"/>
-                            <TextBlock x:Name="LblDiffThr" Width="34" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0"/>
-
-                            <CheckBox x:Name="ChkDarkPixelComp" Content="Dark pixel compensation" IsChecked="False" VerticalAlignment="Center"
-                                      ToolTip="Boost neighbors around dark pixels: +15% (N/S/E/W), +10% (diagonals), +5% (2-step N/S/E/W)"
-                                      Margin="0,0,16,0" Checked="ChkDarkPixelComp_Changed" Unchecked="ChkDarkPixelComp_Changed" />
-
-                            <CheckBox x:Name="ChkZeroZeroWhite" Content="(0=0)→white" IsChecked="False" VerticalAlignment="Center"
-                                      Checked="ChkZeroZeroWhite_Changed" Unchecked="ChkZeroZeroWhite_Changed"/>
-                        </WrapPanel>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="Configuration" Padding="10" Margin="0,0,0,6">
-                    <StackPanel Orientation="Vertical">
-                        <WrapPanel HorizontalAlignment="Center" Margin="0,0,0,8">
-                            <TextBlock Text="LSM Device Type:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox x:Name="CmbLsmDeviceType" Width="140" SelectedIndex="0" SelectionChanged="CmbLsmDeviceType_SelectionChanged" Margin="0,0,18,0">
+                        <!-- LSM Device Type -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <TextBlock Text="LSM Device Type:" VerticalAlignment="Center" Width="140" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbLsmDeviceType" Width="200" SelectedIndex="0" SelectionChanged="CmbLsmDeviceType_SelectionChanged">
                                 <ComboBoxItem Content="Osram 2.0"/>
                                 <ComboBoxItem Content="Osram 2.05"/>
                                 <ComboBoxItem Content="Nichia"/>
                             </ComboBox>
-                        </WrapPanel>
-
-                        <WrapPanel HorizontalAlignment="Center">
-                            <TextBlock Text="Source MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtSrcMac" Width="140" Text="3C:CE:15:00:00:19" Margin="0,0,18,0" TextChanged="TxtMac_TextChanged"/>
-
-                            <TextBlock Text="Destination MAC:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtDstMac" Width="140" Text="01:00:5E:16:00:12" Margin="0,0,0,0" TextChanged="TxtMac_TextChanged"/>
-                        </WrapPanel>
+                        </StackPanel>
                     </StackPanel>
                 </GroupBox>
-            </StackPanel>
 
-            <!-- Bottom-left status + dropped -->
-            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,6,0,0">
-                <TextBlock x:Name="LblStatus" TextWrapping="Wrap" />
-                <TextBlock x:Name="LblDiffStats" TextWrapping="Wrap" Margin="0,2,0,0" />
-                <StackPanel Orientation="Horizontal" Margin="0,2,0,0" Visibility="Collapsed">
-                    <TextBlock Text="AVTP in:" Margin="0,0,6,0" />
-                    <TextBlock x:Name="LblAvtpInFps" Margin="0,0,16,0" />
-                    <TextBlock Text="Dropped:" Margin="0,0,6,0" />
-                    <TextBlock x:Name="LblAvtpDropped" />
+                <!-- 2. Application Settings -->
+                <GroupBox Grid.Column="1" Header="Application Settings" Padding="10" Margin="0,0,8,0" MinWidth="320">
+                    <StackPanel Orientation="Vertical">
+                        <!-- Row 1: FPS, B Δ, Force dead pixel ID -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="FPS:" VerticalAlignment="Center" Width="60" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtFps" Width="60" Text="100" Margin="0,0,12,0"/>
+
+                            <TextBlock Text="B Δ:" VerticalAlignment="Center" Width="40" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtBDelta" Width="60" Text="0" Margin="0,0,12,0" TextChanged="BDelta_TextChanged"/>
+
+                            <TextBlock Text="Force dead pixel ID:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtDeadPixelId" Width="80" Text="0" TextChanged="TxtDeadPixelId_TextChanged"/>
+                        </StackPanel>
+
+                        <!-- Row 2: Deviation threshold slider -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Deviation threshold:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Slider x:Name="SldDiffThr" Minimum="0" Maximum="255" Value="0" Width="180" Margin="0,0,6,0" ValueChanged="SldDiffThr_ValueChanged"/>
+                            <TextBlock x:Name="LblDiffThr" Width="34" TextAlignment="Right" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Row 3: Checkboxes -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <CheckBox x:Name="ChkDarkPixelComp" Content="Dark pixel compensation" IsChecked="False" VerticalAlignment="Center"
+                                      ToolTip="Boost neighbors around dark pixels: +15% (N/S/E/W), +10% (diagonals), +5% (2-step N/S/E/W)"
+                                      Margin="0,0,12,0" Checked="ChkDarkPixelComp_Changed" Unchecked="ChkDarkPixelComp_Changed" />
+
+                            <CheckBox x:Name="ChkZeroZeroWhite" Content="(0=0)→white" IsChecked="False" VerticalAlignment="Center"
+                                      Checked="ChkZeroZeroWhite_Changed" Unchecked="ChkZeroZeroWhite_Changed"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- 3. Ethernet Configuration -->
+                <GroupBox Grid.Column="2" Header="Ethernet Configuration" Padding="10" Margin="0,0,0,0" MinWidth="220">
+                    <StackPanel Orientation="Vertical">
+                        <!-- Network Interface Card -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="NIC:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbLiveNic" Width="240" SelectionChanged="CmbLiveNic_SelectionChanged" Margin="0,0,6,0"/>
+                            <Button Content="Refresh" Click="BtnRefreshNics_Click" Padding="8,4"/>
+                        </StackPanel>
+
+                        <!-- Source MAC -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Source MAC:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtSrcMac" Width="160" Text="3C:CE:15:00:00:19" TextChanged="TxtMac_TextChanged"/>
+                        </StackPanel>
+
+                        <!-- Destination MAC -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <TextBlock Text="Destination MAC:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtDstMac" Width="160" Text="01:00:5E:16:00:12" TextChanged="TxtMac_TextChanged"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+            </Grid>
+
+            <!-- Footer: Status information -->
+            <GroupBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Header="Status" Padding="8" Margin="10,6,10,0">
+                <StackPanel Orientation="Vertical">
+                    <TextBlock x:Name="LblStatus" TextWrapping="Wrap" />
+                    <TextBlock x:Name="LblDiffStats" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0" Visibility="Collapsed">
+                        <TextBlock Text="AVTP in:" Margin="0,0,6,0" />
+                        <TextBlock x:Name="LblAvtpInFps" Margin="0,0,16,0" />
+                        <TextBlock Text="Dropped:" Margin="0,0,6,0" />
+                        <TextBlock x:Name="LblAvtpDropped" />
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </GroupBox>
         </Grid>
     </Grid>
 </Window>
