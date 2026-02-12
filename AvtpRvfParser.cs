@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public static class AvtpRvfParser
 {
@@ -13,7 +13,6 @@ public static class AvtpRvfParser
     private const int H = 80;
     private const int NumLines = 4;
     private const int PayloadBytes = W * NumLines; // 1280
-    private const int RvfHeaderSize = 21;
 
     public static bool TryParseAvtpRvfEthernet(ReadOnlySpan<byte> frame, out int line1, out bool endFrame, out byte[] payload)
     {
@@ -52,47 +51,6 @@ public static class AvtpRvfParser
         if (line1 <= 0 || line1 > H) return false;
 
         payload = avtp.Slice(AvtpPayloadOffset, PayloadBytes).ToArray();
-        return true;
-    }
-
-    // Parse RVF-over-UDP payloads that start with "RVFU" header used by some gateways.
-    // If successful, returns a RvfChunk-like tuple via out parameter.
-    public static bool TryParseRvfUdp(ReadOnlySpan<byte> buf, out RvfChunk chunk)
-    {
-        // Initialize to an empty, non-null RvfChunk to satisfy non-nullable out parameter
-        chunk = new RvfChunk(0, 0, 0, 0, false, 0, 0, Array.Empty<byte>());
-        // Find 'RVFU' magic within first 64 bytes
-        int max = Math.Min(buf.Length - 4, 64);
-        int m = -1;
-        for (int i = 0; i <= max; i++)
-        {
-            if (buf[i] == (byte)'R' && buf[i + 1] == (byte)'V' && buf[i + 2] == (byte)'F' && buf[i + 3] == (byte)'U')
-            {
-                m = i; break;
-            }
-        }
-        if (m < 0) return false;
-
-        int o = m + 4;
-        if (buf.Length < o + (RvfHeaderSize - 4)) return false;
-
-        byte ver = buf[o++];
-        ushort w = BinaryPrimitives.ReadUInt16LittleEndian(buf.Slice(o, 2)); o += 2;
-        ushort h = BinaryPrimitives.ReadUInt16LittleEndian(buf.Slice(o, 2)); o += 2;
-        ushort line = BinaryPrimitives.ReadUInt16LittleEndian(buf.Slice(o, 2)); o += 2;
-        byte numLines = buf[o++];
-        bool endFrame = buf[o++] != 0;
-        uint frameId = BinaryPrimitives.ReadUInt32LittleEndian(buf.Slice(o, 4)); o += 4;
-        uint seq = BinaryPrimitives.ReadUInt32LittleEndian(buf.Slice(o, 4)); o += 4;
-
-        int payloadLen = numLines * w;
-        if (payloadLen <= 0 || payloadLen > 200_000) return false;
-        if (buf.Length < o + payloadLen) return false;
-
-        var payload = new byte[payloadLen];
-        buf.Slice(o, payloadLen).CopyTo(payload);
-
-        chunk = new RvfChunk(w, h, line, numLines, endFrame, frameId, seq, payload);
         return true;
     }
 }

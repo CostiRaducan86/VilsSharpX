@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
     /// Manages video recording and frame snapshot saving operations.

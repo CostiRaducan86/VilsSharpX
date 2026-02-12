@@ -1,10 +1,10 @@
-# VideoStreamPlayer – restart-proof project brief (2026-01-16)
+﻿# VilsSharpX – restart-proof project brief (2026-01-16)
 
 If you (or Copilot) come back after a VS Code restart, read this file first.
 
 ## Purpose / “line” of the project
 This is a pixel-accurate inspection tool for 8-bit grayscale video frames:
-- Ingest frames from AVTP/RVF (UDP live or PCAP replay).
+- Ingest frames from AVTP/RVF (Ethernet live or PCAP replay).
 - Support a lightweight “Scene” mode that loops through image files (for A/B toggling tests).
 - Visualize **A**, **B**, and **DIFF** in a way that is *pixel-correct* under zoom/pan.
 - Provide diagnostics (FPS, dropped/gaps).
@@ -18,7 +18,7 @@ This is a pixel-accurate inspection tool for 8-bit grayscale video frames:
 - Avoid shared-buffer races: frames are cloned/snapshotted where needed.
 
 ## Data flow (high level)
-1. UDP datagram → RVF parsing (`RvfUdpReceiver`) → chunk callback → reassembly (`RvfReassembler`).
+1. Ethernet AVTP frame → RVF parsing (`AvtpRvfParser`) → chunk callback → reassembly (`RvfReassembler`).
 2. Frame-ready event publishes a **copy** of the frame.
 3. `MainWindow` updates internal `_latest*` frames and calls `RenderAll()`.
 4. When paused, `_paused*` snapshots are used so overlays match the frozen image.
@@ -80,14 +80,14 @@ This is a pixel-accurate inspection tool for 8-bit grayscale video frames:
   **frame content changes per second** (useful when the AVI was recorded at fixed fps but contains repeated frames).
 
 ## Settings persistence
-- Settings file: `%APPDATA%\VideoStreamPlayer\settings.json`.
+- Settings file: `%APPDATA%\VilsSharpX\settings.json`.
 - A settings migration exists to flip old defaults:
   - Dark pixel compensation OFF
   - (0=0)→white OFF
 
 ## Logs / diagnostics
 - App has no console (WinExe). Important traces go to files:
-  - `udp_rx.log`
+  - `diagnostic.log`
   - `crash.log`
 
 ## How to validate quickly
@@ -105,7 +105,7 @@ This is a pixel-accurate inspection tool for 8-bit grayscale video frames:
 - `MainWindow.xaml.cs` – render pipeline, compare, overlays, recording integration, dark pixel tools.
 - `AviRecorder.cs` – AVI writer + XLSX report generation.
 - `AppSettings.cs` – persisted settings + migration.
-- `RvfUdpReceiver.cs`, `RvfReassembler.cs`, `RvfProtocol.cs` – protocol and reassembly.
+- `AvtpRvfParser.cs`, `RvfReassembler.cs`, `RvfProtocol.cs` – protocol and reassembly.
 
 ## Scene format (supported subset)
 Preferred (minimal) format:

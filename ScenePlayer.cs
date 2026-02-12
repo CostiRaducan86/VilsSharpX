@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
     /// Manages scene playback state and frame retrieval.

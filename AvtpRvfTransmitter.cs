@@ -1,4 +1,4 @@
-// AvtpRvfTransmitter.cs
+﻿// AvtpRvfTransmitter.cs
 using System;
 using System.Linq;
 using System.Threading;
@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using SharpPcap;
 using SharpPcap.LibPcap;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     public sealed class AvtpRvfTransmitter : IDisposable
     {

@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Utility methods for loading, cropping, and saving grayscale images.

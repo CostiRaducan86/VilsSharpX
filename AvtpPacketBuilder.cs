@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
     /// Utility class for building AVTP Ethernet frames.

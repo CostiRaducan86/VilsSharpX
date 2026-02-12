@@ -1,4 +1,4 @@
-namespace VideoStreamPlayer;
+﻿namespace VilsSharpX;
 
 /// <summary>
 /// Represents supported LSM (Lighting System Module) device types with their respective resolutions.

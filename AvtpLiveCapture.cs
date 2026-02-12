@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using SharpPcap;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public sealed class AvtpLiveCapture : IDisposable
 {

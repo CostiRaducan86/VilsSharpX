@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Windows.Controls;
 using SharpPcap;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
     /// Manages live network interface selection for AVTP capture/transmit.

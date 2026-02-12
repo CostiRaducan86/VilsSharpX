@@ -1,15 +1,15 @@
-using System;
+﻿using System;
 using System.IO;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
-    /// Simple file-based logging utility for UDP/AVTP diagnostic messages.
+    /// Simple file-based logging utility for AVTP diagnostic messages.
     /// </summary>
     public static class DiagnosticLogger
     {
         private static readonly object _logLock = new();
-        private static readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "udp_rx.log");
+        private static readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "diagnostic.log");
 
         public static string LogPath => _logPath;
 

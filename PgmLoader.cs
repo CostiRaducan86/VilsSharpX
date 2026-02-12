@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Loads PGM (Portable GrayMap) images in P2 (ASCII) and P5 (binary) formats.

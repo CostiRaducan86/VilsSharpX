@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Manages UI settings load/save operations.
@@ -95,7 +95,6 @@ public sealed class UiSettingsManager
         bool darkPixelCompensationEnabled,
         bool avtpLiveEnabled,
         string? avtpLiveDeviceHint,
-        bool avtpLiveUdpEnabled,
         int modeOfOperation,
         string srcMac,
         string dstMac,
@@ -116,7 +115,6 @@ public sealed class UiSettingsManager
             DarkPixelCompensationEnabled = darkPixelCompensationEnabled,
             AvtpLiveEnabled = avtpLiveEnabled,
             AvtpLiveDeviceHint = avtpLiveDeviceHint,
-            AvtpLiveUdpEnabled = avtpLiveUdpEnabled,
             ModeOfOperation = modeOfOperation,
             SrcMac = srcMac,
             DstMac = dstMac,

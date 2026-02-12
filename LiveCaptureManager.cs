@@ -1,18 +1,17 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
-    /// Manages live capture sources: Ethernet/AVTP, UDP/RVFU, and PCAP replay.
+    /// Manages live capture sources: Ethernet/AVTP and PCAP replay.
     /// </summary>
     public class LiveCaptureManager : IDisposable
     {
         public enum Feed
         {
             None = 0,
-            UdpRvf = 1,
             EthernetAvtp = 2,
             PcapReplay = 3,
         }
@@ -21,8 +20,6 @@ namespace VideoStreamPlayer
     private readonly object _rvfPushLock = new();
     private readonly Action<string> _log;
 
-    private CancellationTokenSource? _udpCts;
-    private RvfUdpReceiver? _udp;
     private AvtpLiveCapture? _avtpLive;
     private CancellationTokenSource? _pcapCts;
 
@@ -179,40 +176,6 @@ namespace VideoStreamPlayer
         }
 
         /// <summary>
-        /// Start UDP/RVFU receiver.
-        /// </summary>
-        public void StartUdpReceiver(int port)
-        {
-            if (_udpCts != null) return; // Already running
-
-            _udpCts = new CancellationTokenSource();
-            _udp = new RvfUdpReceiver(port);
-
-            _log($"UDP start on 0.0.0.0:{port}");
-
-            _udp.OnChunk += c =>
-            {
-                if (IsLiveInputSuppressed()) return;
-                if (!TrySetActiveFeed(Feed.UdpRvf)) return;
-                PushChunk(c);
-            };
-
-            _ = Task.Run(() => _udp.RunAsync(_udpCts.Token));
-            _lastRvfSrcLabel = "UDP/RVFU";
-        }
-
-        /// <summary>
-        /// Stop UDP receiver.
-        /// </summary>
-        public void StopUdpReceiver()
-        {
-            try { _udpCts?.Cancel(); } catch { }
-            try { _udp?.Dispose(); } catch { }
-            _udpCts = null;
-            _udp = null;
-        }
-
-        /// <summary>
         /// Start PCAP replay.
         /// </summary>
         public void StartPcapReplay(string path, ManualResetEventSlim pauseGate, Action? onComplete = null, Action<string>? onError = null)
@@ -279,7 +242,6 @@ namespace VideoStreamPlayer
         public void StopAll()
         {
             StopPcapReplay();
-            StopUdpReceiver();
             StopEthernetCapture();
         }
 

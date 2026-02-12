@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Globalization;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Helper for formatting status labels and FPS info.
@@ -50,9 +50,9 @@ public static class StatusFormatter
     /// <summary>
     /// Formats the diff stats label.
     /// </summary>
-    public static string FormatDiffStats(int maxDiff, int minDiff, int aboveDeadband, int totalDarkPixels)
+    public static string FormatDiffStats(int maxDiff, int minDiff, double meanAbsDiff, int aboveDeadband, int totalDarkPixels)
     {
-        return $"COMPARE (B−A): max_positive_dev={Math.Max(0, maxDiff)}  max_negative_dev={Math.Min(0, minDiff)}  total_pixels_dev={aboveDeadband}  total_dark_pixels={totalDarkPixels}";
+        return $"COMPARE (LVDS\u2212AVTP): max_positive_dev={Math.Max(0, maxDiff)}  max_negative_dev={Math.Min(0, minDiff)}  average_pixels_dev={meanAbsDiff:F0}  total_pixels_dev={aboveDeadband}  total_dark_pixels={totalDarkPixels}";
     }
 
     /// <summary>
@@ -85,13 +85,9 @@ public static class StatusFormatter
     /// <summary>
     /// Formats waiting for signal status message.
     /// </summary>
-    public static string FormatWaitingForSignal(bool udpEnabled, int udpPort, string logPath)
+    public static string FormatWaitingForSignal(string logPath)
     {
-        string msg = $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort";
-        if (udpEnabled)
-            msg += $"; UDP/RVFU on 0.0.0.0:{udpPort}";
-        msg += $". (log: {logPath})";
-        return msg;
+        return $"Waiting for signal... (0.0 fps) (Mode=AVTP Live). Ethernet/AVTP capture best-effort. (log: {logPath})";
     }
 
     /// <summary>

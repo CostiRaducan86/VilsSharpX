@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Manages zoom and pan transforms for image panes.

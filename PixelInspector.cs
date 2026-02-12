@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Provides pixel coordinate mapping and info display for image panes.
@@ -79,9 +79,9 @@ public sealed class PixelInspector
     public static string FormatDiffInfo(int x, int y, byte valueA, byte valueB, int width)
     {
         int diff = valueB - valueA;
-        int absDiff = diff < 0 ? -diff : diff;
+        //int absDiff = diff < 0 ? -diff : diff;
         int pixelId = (y * width) + x + 1;
-        return $"x={x} y={y} A={valueA} B={valueB} diff(B−A)={diff} |diff|={absDiff} pixel_ID={pixelId}";
+        return $"x={x} y={y} pixel_ID={pixelId} AVTP={valueA} LVDS={valueB} diff(LVDS−AVTP)={diff}";
     }
 
     /// <summary>

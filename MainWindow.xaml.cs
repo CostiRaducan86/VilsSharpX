@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Net;
 using SharpPcap;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,7 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     public partial class MainWindow : Window
     {
@@ -95,7 +94,6 @@ namespace VideoStreamPlayer
         // Live AVTP capture settings (Ethernet via SharpPcap)
         private bool _avtpLiveEnabled = true;
         private string? _avtpLiveDeviceHint;
-        private bool _avtpLiveUdpEnabled = true;
 
         // AVTP TX MAC addresses
         private string _srcMac = "3C:CE:15:00:00:19";
@@ -244,7 +242,7 @@ namespace VideoStreamPlayer
             _wbD = BitmapUtils.MakeBgr24(w, h);
 
             // Helper classes that depend on resolution
-            _liveCapture = new LiveCaptureManager(w, h, FpsEstimationWindowSec * 2.5, AppendUdpLog);
+            _liveCapture = new LiveCaptureManager(w, h, FpsEstimationWindowSec * 2.5, AppendDiagLog);
             _recordingManager = new RecordingManager(w, h);
             _sequencePlayer = new SequencePlayer(w, h);
             _scenePlayer = new ScenePlayer(w, h);
@@ -253,7 +251,7 @@ namespace VideoStreamPlayer
             _snapshotSaver = new FrameSnapshotSaver(w, h);
             _pixelInspector = new PixelInspector(w, h);
             _settingsManager = new UiSettingsManager(w, h);
-            _txManager = new AvtpTransmitManager(w, h, AppendUdpLog);
+            _txManager = new AvtpTransmitManager(w, h, AppendDiagLog);
         }
 
         /// <summary>
@@ -328,7 +326,7 @@ namespace VideoStreamPlayer
                 ? double.NaN
                 : (DateTime.UtcNow - _liveCapture.LastAvtpFrameUtc).TotalMilliseconds;
 
-            AppendUdpLog(
+            AppendDiagLog(
                 $"[live] signal lost -> waiting | prevFeed={prevFeed} src={_liveCapture.LastRvfSrcLabel} " +
                 $"ageMs={(double.IsNaN(lastAgeMs) ? "n/a" : lastAgeMs.ToString("F0", CultureInfo.InvariantCulture))} " +
                 $"timeoutMs={LiveSignalLostTimeoutSec * 1000:F0} " +
@@ -373,17 +371,18 @@ namespace VideoStreamPlayer
         /// <summary>
         /// Sets button enabled/disabled state based on whether playback is running.
         /// When stopped: Load Files + Start enabled; Prev/Next/Record/Stop/Save/OpenFolder disabled.
-        /// When running: Start(Pause) + Prev/Next/Record/Stop/Save/OpenFolder enabled; Load Files disabled.
+        /// When running: Start(Pause) + Record/Stop/Save/OpenFolder enabled; Prev/Next disabled (only enabled when paused).
+        /// When paused: Prev/Next enabled; Record disabled.
         /// </summary>
-        private void ApplyButtonStates(bool isRunning)
+        private void ApplyButtonStates(bool isRunning, bool isPaused = false)
         {
             bool isAvtpLive = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
             // Load Files is disabled while running OR when in AVTP Live mode (no file sources)
             if (BtnLoadFiles != null) BtnLoadFiles.IsEnabled = !isRunning && !isAvtpLive;
             if (BtnStart != null) BtnStart.IsEnabled = true; // always enabled (Start or Pause/Resume)
-            if (BtnPrev != null) BtnPrev.IsEnabled = isRunning;
-            if (BtnNext != null) BtnNext.IsEnabled = isRunning;
-            if (BtnRecord != null) BtnRecord.IsEnabled = isRunning;
+            if (BtnPrev != null) BtnPrev.IsEnabled = isRunning && isPaused;
+            if (BtnNext != null) BtnNext.IsEnabled = isRunning && isPaused;
+            if (BtnRecord != null) BtnRecord.IsEnabled = isRunning && !isPaused;
             if (BtnStop != null) BtnStop.IsEnabled = isRunning;
             if (BtnSave != null) BtnSave.IsEnabled = isRunning;
             if (BtnOpenSnapshots != null) BtnOpenSnapshots.IsEnabled = true; // always enabled
@@ -699,7 +698,7 @@ namespace VideoStreamPlayer
             ShowIdleGradient();
             int w = GetCurrentWidth();
             int h = GetCurrentHeight();
-            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}�{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
+            LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}×{h}) and press Start to begin rendering.";
 
             LoadUiSettings();
 
@@ -735,7 +734,6 @@ namespace VideoStreamPlayer
 
             string src = GetActiveAvtpFeed() switch
             {
-                LiveCaptureManager.Feed.UdpRvf => "UDP/RVFU",
                 LiveCaptureManager.Feed.EthernetAvtp => "Ethernet/AVTP",
                 LiveCaptureManager.Feed.PcapReplay => "PCAP",
                 _ => "?"
@@ -762,7 +760,6 @@ namespace VideoStreamPlayer
 
                 _avtpLiveEnabled = s.AvtpLiveEnabled;
                 _avtpLiveDeviceHint = s.AvtpLiveDeviceHint;
-                _avtpLiveUdpEnabled = s.AvtpLiveUdpEnabled;
 
                 _srcMac = s.SrcMac ?? "3C:CE:15:00:00:19";
                 _dstMac = s.DstMac ?? "01:00:5E:16:00:12";
@@ -828,7 +825,7 @@ namespace VideoStreamPlayer
                 // Update status text with the correct (possibly reinitialized) resolution
                 int w = GetCurrentWidth();
                 int h = GetCurrentHeight();
-                LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}\u00d7{h}) and press Start to begin rendering. UDP listens on {IPAddress.Any}:{RvfProtocol.DefaultPort} when started.";
+                LblStatus.Text = $"Ready. Load an image (PGM/BMP/PNG; BMP/PNG are converted to Gray8 u8; will crop top-left to {w}×{h}) and press Start to begin rendering.";
             }
             finally
             {
@@ -842,7 +839,7 @@ namespace VideoStreamPlayer
             var s = UiSettingsManager.CreateFromState(
                 fps, _bValueDelta, _diffThreshold, _zeroZeroIsWhite,
                 Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
-                _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation,
+                _avtpLiveEnabled, _avtpLiveDeviceHint, (int)_modeOfOperation,
                 _srcMac, _dstMac, (int)_currentDeviceType,
                 _ecuVariant, _vlanId, _vlanPriority, _avtpEtherType, _streamIdLastByte);
             _settingsManager.TrySave(s);
@@ -867,6 +864,12 @@ namespace VideoStreamPlayer
             StopAll();
             _liveCapture.Reassembler.ResetAll();
             _liveCapture.ClearAvtpFrame();
+
+            // Hide Loop Playing checkbox when switching to AVTP Live mode
+            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+            {
+                if (ChkLoopPlaying != null) ChkLoopPlaying.Visibility = Visibility.Collapsed;
+            }
 
             // Update button enabled states to reflect new mode (e.g. Load Files disabled in AVTP Live)
             ApplyButtonStates(isRunning: false);
@@ -1070,7 +1073,7 @@ namespace VideoStreamPlayer
             {
                 Start(fps);
                 if (BtnStart != null) BtnStart.Content = "Pause";
-                ApplyButtonStates(true);
+                ApplyButtonStates(isRunning: true, isPaused: false);
                 return;
             }
 
@@ -1245,6 +1248,7 @@ namespace VideoStreamPlayer
             if (LblRunInfoB != null) LblRunInfoB.Text = "Paused";
             LblStatus.Text = "Paused.";
 
+            ApplyButtonStates(isRunning: true, isPaused: true);
             UpdateOverlaysAll();
         }
 
@@ -1261,6 +1265,8 @@ namespace VideoStreamPlayer
             }
 
             if (BtnStart != null) BtnStart.Content = "Pause";
+
+            ApplyButtonStates(isRunning: true, isPaused: false);
 
             double shownFps = GetShownFps(avtpInFps: _playback.AvtpInFpsEma);
             bool isAviZero = _lastLoaded == LoadedSource.Avi && shownFps <= 0.0;
@@ -1420,7 +1426,7 @@ namespace VideoStreamPlayer
             // Init playback state and reset stats (includes CTS creation, running=true, paused=false)
             var ct = _playback.Start(fps);
 
-            AppendUdpLog($"[start] mode={_modeOfOperation}, fps={fps}");
+            AppendDiagLog($"[start] mode={_modeOfOperation}, fps={fps}");
 
             // Reset runtime stats
             ApplyNoSignalUiState(noSignal: false);
@@ -1433,7 +1439,6 @@ namespace VideoStreamPlayer
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
             {
                 if (_avtpLiveEnabled) _liveCapture.LastRvfSrcLabel = "Ethernet/AVTP";
-                else if (_avtpLiveUdpEnabled) _liveCapture.LastRvfSrcLabel = "UDP/RVFU";
                 // Explicitly force the 'Waiting for signal...' state at first start
                 EnterWaitingForSignalState();
             }
@@ -1463,6 +1468,7 @@ namespace VideoStreamPlayer
                 _ = Task.Run(() => UiRefreshLoop(ct));
 
                 LblStatus.Text = StatusFormatter.FormatPlayerRunning(fps, avtpEnabled: true);
+                _playback.RunningStatusText = LblStatus.Text;
             }
             else
             {
@@ -1470,7 +1476,7 @@ namespace VideoStreamPlayer
                 _ = Task.Run(() => UiRefreshLoop(ct));
 
                 // Until the first frame arrives, show explicit waiting message.
-                LblStatus.Text = StatusFormatter.FormatWaitingForSignal(_avtpLiveUdpEnabled, RvfProtocol.DefaultPort, GetUdpLogPath());
+                LblStatus.Text = StatusFormatter.FormatWaitingForSignal(GetDiagLogPath());
 
                 _playback.WasWaitingForSignal = true;
             }
@@ -1504,12 +1510,6 @@ namespace VideoStreamPlayer
                     _avtpLiveDeviceHint = deviceHint;
 
                     _liveCapture.StartEthernetCapture(deviceHint);
-                }
-
-                // Optional UDP/RVFU
-                if (_avtpLiveUdpEnabled)
-                {
-                    _liveCapture.StartUdpReceiver(RvfProtocol.DefaultPort);
                 }
             }
             
@@ -1591,7 +1591,10 @@ namespace VideoStreamPlayer
 
             SaveUiSettings();
 
-            LblStatus.Text = StatusFormatter.FormatStoppedStatus(_liveCapture.LastRvfSrcLabel);
+            if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
+                LblStatus.Text = "Stopped.";
+            else
+                LblStatus.Text = StatusFormatter.FormatStoppedStatus(_liveCapture.LastRvfSrcLabel);
 
             ClearOverlay(Pane.A);
             ClearOverlay(Pane.B);
@@ -1601,8 +1604,8 @@ namespace VideoStreamPlayer
             ApplyButtonStates(false);
         }
 
-        private static void AppendUdpLog(string message) => DiagnosticLogger.Log(message);
-        private static string GetUdpLogPath() => DiagnosticLogger.LogPath;
+        private static void AppendDiagLog(string message) => DiagnosticLogger.Log(message);
+        private static string GetDiagLogPath() => DiagnosticLogger.LogPath;
 
         private void BtnLoadSeqA_Click(object sender, RoutedEventArgs e) => LoadSequenceImage(isA: true);
         private void BtnLoadSeqB_Click(object sender, RoutedEventArgs e) => LoadSequenceImage(isA: false);
@@ -1797,7 +1800,7 @@ namespace VideoStreamPlayer
 
         private async Task GeneratorLoopAsync(int fps, CancellationToken ct)
         {
-            AppendUdpLog($"[generator] Entered GeneratorLoop, mode={_modeOfOperation}, fps={fps}");
+            AppendDiagLog($"[generator] Entered GeneratorLoop, mode={_modeOfOperation}, fps={fps}");
             var period = TimeSpan.FromSeconds(1.0 / Math.Max(1, fps));
             var sw = Stopwatch.StartNew();
             var next = sw.Elapsed;
@@ -1809,7 +1812,7 @@ namespace VideoStreamPlayer
         
                 next += period;
         
-                // A: either UDP latest or PGM/AVI/Scene fallback (depending on what you loaded)
+                // A: either AVTP latest or PGM/AVI/Scene fallback (depending on what you loaded)
                 var aBytes = GetASourceBytes();
                 var a = new Frame(_currentWidth, _currentHeight, aBytes, DateTime.UtcNow);
                 _playback.IncrementCountA();
@@ -1845,7 +1848,7 @@ namespace VideoStreamPlayer
                 if (_playback.IsPaused || !_playback.PauseGate.IsSet)
                 {
                     if (_playback.IncrementLateFramesSkipped() == 1)
-                        AppendUdpLog("[ui] generator skipped publish due to pause race (late frame)");
+                        AppendDiagLog("[ui] generator skipped publish due to pause race (late frame)");
                     continue;
                 }
         
@@ -1933,7 +1936,7 @@ namespace VideoStreamPlayer
 
                 if (!_playback.WasWaitingForSignal && LblStatus != null)
                 {
-                    LblStatus.Text = StatusFormatter.FormatWaitingForSignal(_avtpLiveUdpEnabled, RvfProtocol.DefaultPort, GetUdpLogPath());
+                    LblStatus.Text = StatusFormatter.FormatWaitingForSignal(GetDiagLogPath());
                     _playback.RunningStatusText = LblStatus.Text;
                 }
                 _playback.WasWaitingForSignal = true;
@@ -1992,7 +1995,7 @@ namespace VideoStreamPlayer
             }
 
             if (LblDiffStats != null)
-                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, aboveDeadband, totalDarkPixels);
+                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels);
 
             ApplyNoSignalUiState(noSignal: false);
             UpdateFpsLabels();

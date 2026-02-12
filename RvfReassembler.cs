@@ -1,4 +1,4 @@
-// DEPRECATED: RVF reassembler
+﻿// DEPRECATED: RVF reassembler
 //
 // This file contains the RVF reassembly logic used to reconstruct 320×80 frames from
 // incoming RVF/AVTP chunks. The reassembler is kept in source for traceability and
@@ -6,7 +6,7 @@
 // default and uses the Ethernet/AVTP capture as the primary live input.
 
 using System;
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public sealed record RvfChunk(
     ushort Width,

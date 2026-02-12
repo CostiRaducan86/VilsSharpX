@@ -20,7 +20,7 @@ Thumbs.db
 Desktop.ini
 
 # Logs (keep if you want them versioned)
-# udp_rx.log
+# diagnostic.log
 # crash.log
 
 # Generated outputs (recordings/snapshots)

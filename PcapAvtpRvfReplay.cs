@@ -1,11 +1,11 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public static class PcapAvtpRvfReplay
 {

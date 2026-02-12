@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Helper for loading various source files (Image, PCAP, AVI, Scene).

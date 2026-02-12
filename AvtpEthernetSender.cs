@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using SharpPcap;
 using SharpPcap.LibPcap;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     public static class AvtpEthernetSender
     {

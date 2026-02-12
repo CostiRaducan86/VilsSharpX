@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Provides dark pixel compensation (Cassandra-style) for ECU output simulation.

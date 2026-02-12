@@ -1,4 +1,4 @@
-namespace VideoStreamPlayer
+﻿namespace VilsSharpX
 {
     /// <summary>
     /// Manages sequence (A/B toggle) playback state.
@@ -103,7 +103,7 @@ namespace VideoStreamPlayer
             string a = _seqPathA != null ? System.IO.Path.GetFileName(_seqPathA) : "<not set>";
             string b = _seqPathB != null ? System.IO.Path.GetFileName(_seqPathB) : "<not set>";
             string cur = _seqIndex == 0 ? "A" : "B";
-            return $"Sequence mode (A={a}, B={b}), current={cur}. Use Prev/Next to toggle.";
+            return $"Sequence mode (AVTP={a}, LVDS={b}), current={cur}. Use Prev/Next to toggle.";
         }
     }
 }

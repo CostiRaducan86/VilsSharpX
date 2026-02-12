@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 /// <summary>
 /// Renders difference (comparison) between two grayscale frames to a color-coded BGR24 image.
@@ -27,7 +27,7 @@ public static class DiffRenderer
     /// <param name="w">Image width.</param>
     /// <param name="h">Image height.</param>
     /// <param name="deadband">Threshold below which differences are considered equal (green).</param>
-    /// <param name="zeroZeroIsWhite">If true, render A=0,B=0 as white instead of green.</param>
+    /// <param name="zeroZeroIsWhite">If true, render AVTP=0,LVDS=0 as white instead of green.</param>
     /// <param name="minDiff">Output: minimum B-A difference.</param>
     /// <param name="maxDiff">Output: maximum B-A difference.</param>
     /// <param name="meanDiff">Output: mean B-A difference.</param>
@@ -99,7 +99,7 @@ public static class DiffRenderer
     /// <param name="a">A (input) pixel value.</param>
     /// <param name="b">B (ECU output) pixel value.</param>
     /// <param name="deadband">Threshold for equality.</param>
-    /// <param name="zeroZeroIsWhite">Render A=0,B=0 as white.</param>
+    /// <param name="zeroZeroIsWhite">Render AVTP=0,LVDS=0 as white.</param>
     /// <param name="bl">Output blue component.</param>
     /// <param name="g">Output green component.</param>
     /// <param name="r">Output red component.</param>

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     /// <summary>
     /// Manages AVI file playback state and frame retrieval.

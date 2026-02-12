@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace VideoStreamPlayer
+namespace VilsSharpX
 {
     public partial class App : Application
     {

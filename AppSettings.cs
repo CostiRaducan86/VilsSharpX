@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public sealed class AppSettings
 {
@@ -23,11 +23,6 @@ public sealed class AppSettings
     // to sniff ethertype 0x22F0 and reassemble RVF frames.
     public bool AvtpLiveEnabled { get; set; } = true;
     public string? AvtpLiveDeviceHint { get; set; } = null;
-
-    // Optional: also listen for RVFU over UDP in AVTP Live mode.
-    // NOTE: UDP/RVFU support is preserved in source for reference but disabled by default.
-    // The UI toggle was removed; keep it configurable via settings.json if needed.
-    public bool AvtpLiveUdpEnabled { get; set; } = false;
 
     // 0 = player (files/pcap/avi/scene), 1 = live AVTP monitor
     public int ModeOfOperation { get; set; } = 1;
@@ -55,7 +50,7 @@ public static class AppSettingsStore
 
     public static string GetSettingsPath()
     {
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VideoStreamPlayer");
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VilsSharpX");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, FileName);
     }

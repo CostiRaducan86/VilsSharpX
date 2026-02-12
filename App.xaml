@@ -1,7 +1,7 @@
-﻿<Application x:Class="VideoStreamPlayer.App"
+﻿<Application x:Class="VilsSharpX.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:VideoStreamPlayer"
+             xmlns:local="clr-namespace:VilsSharpX"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
          

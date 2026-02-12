@@ -1,4 +1,4 @@
-using SharpAvi.Output;
+﻿using SharpAvi.Output;
 using SharpAvi;
 using SharpAvi.Codecs;
 using ClosedXML.Excel;
@@ -10,7 +10,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace VideoStreamPlayer;
+namespace VilsSharpX;
 
 public sealed class AviTripletRecorder : IDisposable
 {
