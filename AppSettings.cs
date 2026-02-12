@@ -6,7 +6,7 @@ namespace VideoStreamPlayer;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsVersion = 6;
+    public const int CurrentSettingsVersion = 7;
 
     public int SettingsVersion { get; set; } = CurrentSettingsVersion;
 
@@ -38,6 +38,15 @@ public sealed class AppSettings
 
     // LSM Device Type (0=Osram20, 1=Osram205, 2=Nichia)
     public int LsmDeviceType { get; set; } = 0;
+
+    // ECU Variant (index into the list of known variants, 0-based)
+    public int EcuVariant { get; set; } = 0;
+
+    // AVTP header fields
+    public int VlanId { get; set; } = 70;
+    public int VlanPriority { get; set; } = 5;
+    public string AvtpEtherType { get; set; } = "0x22F0";
+    public string StreamIdLastByte { get; set; } = "0x50";
 }
 
 public static class AppSettingsStore
@@ -98,6 +107,18 @@ public static class AppSettingsStore
                 // Migration: add LSM device type setting with default (Osram 2.0).
                 settings.LsmDeviceType = 0;
                 settings.SettingsVersion = 6;
+                migrated = true;
+            }
+
+            if (settings.SettingsVersion < 7)
+            {
+                // Migration: add ECU Variant + AVTP header fields with defaults.
+                settings.EcuVariant = 0;
+                settings.VlanId = 70;
+                settings.VlanPriority = 5;
+                settings.AvtpEtherType = "0x22F0";
+                settings.StreamIdLastByte = "0x50";
+                settings.SettingsVersion = 7;
                 migrated = true;
             }
 

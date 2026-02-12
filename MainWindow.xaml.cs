@@ -101,6 +101,13 @@ namespace VideoStreamPlayer
         private string _srcMac = "3C:CE:15:00:00:19";
         private string _dstMac = "01:00:5E:16:00:12";
 
+        // AVTP header fields
+        private int _ecuVariant = 0;
+        private int _vlanId = 70;
+        private int _vlanPriority = 5;
+        private string _avtpEtherType = "0x22F0";
+        private string _streamIdLastByte = "0x50";
+
         private ModeOfOperation _modeOfOperation = ModeOfOperation.AvtpLiveMonitor;
 
         // Fallback image / generator base
@@ -159,6 +166,8 @@ namespace VideoStreamPlayer
         private bool _overlayPendingB;
         private bool _overlayPendingD;
 
+        private bool _isUpdatingDiffThresholdText;
+
         private WriteableBitmap _wbA = null!;
         private WriteableBitmap _wbB = null!;
         private WriteableBitmap _wbD = null!;
@@ -205,7 +214,7 @@ namespace VideoStreamPlayer
 
             InitializeDefaultPatterns();
 
-            if (LblDiffThr != null) LblDiffThr.Text = "0";
+            if (TxtDiffThr != null) TxtDiffThr.Text = "0";
 
             _settingsManager.IsLoading = false;
         }
@@ -758,6 +767,12 @@ namespace VideoStreamPlayer
                 _srcMac = s.SrcMac ?? "3C:CE:15:00:00:19";
                 _dstMac = s.DstMac ?? "01:00:5E:16:00:12";
 
+                _ecuVariant = Math.Clamp(s.EcuVariant, 0, 14);
+                _vlanId = Math.Clamp(s.VlanId, 0, 4095);
+                _vlanPriority = Math.Clamp(s.VlanPriority, 0, 7);
+                _avtpEtherType = s.AvtpEtherType ?? "0x22F0";
+                _streamIdLastByte = s.StreamIdLastByte ?? "0x50";
+
                 _modeOfOperation = s.ModeOfOperation == (int)ModeOfOperation.AvtpLiveMonitor
                     ? ModeOfOperation.AvtpLiveMonitor
                     : ModeOfOperation.PlayerFromFiles;
@@ -778,8 +793,7 @@ namespace VideoStreamPlayer
 
                 if (TxtFps != null) TxtFps.Text = s.Fps.ToString();
                 if (TxtBDelta != null) TxtBDelta.Text = s.BDelta.ToString();
-                if (SldDiffThr != null) SldDiffThr.Value = s.Deadband;
-                if (LblDiffThr != null) LblDiffThr.Text = s.Deadband.ToString();
+                if (TxtDiffThr != null) TxtDiffThr.Text = s.Deadband.ToString();
                 if (ChkZeroZeroWhite != null) ChkZeroZeroWhite.IsChecked = s.ZeroZeroIsWhite;
                 if (TxtDeadPixelId != null) TxtDeadPixelId.Text = s.ForcedDeadPixelId.ToString();
                 if (ChkDarkPixelComp != null) ChkDarkPixelComp.IsChecked = s.DarkPixelCompensationEnabled;
@@ -795,6 +809,16 @@ namespace VideoStreamPlayer
                 {
                     CmbLsmDeviceType.SelectedIndex = (int)_currentDeviceType;
                 }
+
+                if (CmbEcuVariant != null)
+                {
+                    CmbEcuVariant.SelectedIndex = _ecuVariant;
+                }
+
+                if (TxtVlanId != null) TxtVlanId.Text = _vlanId.ToString();
+                if (TxtVlanPriority != null) TxtVlanPriority.Text = _vlanPriority.ToString();
+                if (TxtAvtpEtherType != null) TxtAvtpEtherType.Text = _avtpEtherType;
+                if (TxtStreamIdLastByte != null) TxtStreamIdLastByte.Text = _streamIdLastByte;
 
                 RefreshLiveNicList();
                 UpdateLiveUiEnabledState();
@@ -819,7 +843,8 @@ namespace VideoStreamPlayer
                 fps, _bValueDelta, _diffThreshold, _zeroZeroIsWhite,
                 Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
                 _avtpLiveEnabled, _avtpLiveDeviceHint, _avtpLiveUdpEnabled, (int)_modeOfOperation,
-                _srcMac, _dstMac, (int)_currentDeviceType);
+                _srcMac, _dstMac, (int)_currentDeviceType,
+                _ecuVariant, _vlanId, _vlanPriority, _avtpEtherType, _streamIdLastByte);
             _settingsManager.TrySave(s);
         }
 
@@ -874,6 +899,30 @@ namespace VideoStreamPlayer
             LblStatus.Text = $"Device Type: {_currentDeviceType.GetDisplayName()} ({GetCurrentWidth()}x{GetCurrentHeight()}). Load a file or start live capture.";
         }
 
+        private void CmbEcuVariant_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading || !IsLoaded) return;
+
+            _ecuVariant = CmbEcuVariant?.SelectedIndex ?? 0;
+            SaveUiSettings();
+        }
+
+        private void TxtAvtpHeader_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading || !IsLoaded) return;
+
+            if (TxtVlanId != null && int.TryParse(TxtVlanId.Text, out var vid))
+                _vlanId = Math.Clamp(vid, 0, 4095);
+            if (TxtVlanPriority != null && int.TryParse(TxtVlanPriority.Text, out var vpri))
+                _vlanPriority = Math.Clamp(vpri, 0, 7);
+            if (TxtAvtpEtherType != null)
+                _avtpEtherType = TxtAvtpEtherType.Text?.Trim() ?? "0x22F0";
+            if (TxtStreamIdLastByte != null)
+                _streamIdLastByte = TxtStreamIdLastByte.Text?.Trim() ?? "0x50";
+
+            SaveUiSettings();
+        }
+
         // Convenience aliases for live capture feed - delegate to _liveCapture
         private bool TrySetActiveAvtpFeed(LiveCaptureManager.Feed feed) => _liveCapture.TrySetActiveFeed(feed);
         private LiveCaptureManager.Feed GetActiveAvtpFeed() => _liveCapture.ActiveFeed;
@@ -918,10 +967,34 @@ namespace VideoStreamPlayer
             }
         }
 
-        private void SldDiffThr_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void TxtDiffThr_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            _diffThreshold = (byte)Math.Clamp((int)Math.Round(e.NewValue), 0, 255);
-            if (LblDiffThr != null) LblDiffThr.Text = _diffThreshold.ToString();
+            if (_settingsManager.IsLoading || _isUpdatingDiffThresholdText) return;
+
+            if (TxtDiffThr != null && int.TryParse(TxtDiffThr.Text, out var v))
+                SetDiffThreshold(v, updateText: false);
+        }
+
+        private void BtnDiffThrUp_Click(object sender, RoutedEventArgs e) =>
+            SetDiffThreshold(_diffThreshold + 1, updateText: true);
+
+        private void BtnDiffThrDown_Click(object sender, RoutedEventArgs e) =>
+            SetDiffThreshold(_diffThreshold - 1, updateText: true);
+
+        private void SetDiffThreshold(int value, bool updateText)
+        {
+            byte clamped = (byte)Math.Clamp(value, 0, 255);
+            if (_diffThreshold == clamped && !updateText) return;
+
+            _diffThreshold = clamped;
+
+            if (updateText && TxtDiffThr != null)
+            {
+                _isUpdatingDiffThresholdText = true;
+                TxtDiffThr.Text = _diffThreshold.ToString();
+                _isUpdatingDiffThresholdText = false;
+            }
+
             SaveUiSettings();
             if (_playback.Cts == null || _playback.IsPaused) RenderAll();
         }
@@ -1374,7 +1447,10 @@ namespace VideoStreamPlayer
             // -------------------------------------------------
             if (_modeOfOperation == ModeOfOperation.PlayerFromFiles)
             {
-                _txManager.Initialize(_avtpLiveDeviceHint, _srcMac, _dstMac);
+                ushort ethType = ParseHexUshort(_avtpEtherType, 0x22F0);
+                byte stIdByte = ParseHexByte(_streamIdLastByte, 0x50);
+                _txManager.Initialize(_avtpLiveDeviceHint, _srcMac, _dstMac,
+                    _vlanId, _vlanPriority, ethType, stIdByte);
             }
 
             // -------------------------------------------------
@@ -2077,6 +2153,30 @@ namespace VideoStreamPlayer
             byte av = (a != null && idx < a.Data.Length) ? a.Data[idx] : (byte)0;
             byte bv = (b != null && idx < b.Data.Length) ? b.Data[idx] : (byte)0;
             lbl.Text = PixelInspector.FormatDiffInfo(x, y, av, bv, refFrame.Width);
+        }
+
+        /// <summary>
+        /// Parses a hex string like "0x22F0" or "22F0" to ushort. Returns fallback on failure.
+        /// </summary>
+        private static ushort ParseHexUshort(string? text, ushort fallback)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return fallback;
+            text = text.Trim();
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(2);
+            return ushort.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out var v) ? v : fallback;
+        }
+
+        /// <summary>
+        /// Parses a hex string like "0x50" or "50" to byte. Returns fallback on failure.
+        /// </summary>
+        private static byte ParseHexByte(string? text, byte fallback)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return fallback;
+            text = text.Trim();
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(2);
+            return byte.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out var v) ? v : fallback;
         }
     }
 

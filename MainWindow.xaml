@@ -1,7 +1,7 @@
 ﻿<Window x:Class="VideoStreamPlayer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="VILS SharpX" Width="1400" Height="900" WindowStartupLocation="CenterScreen"
+    Title="VILS SharpX" Width="1200" Height="760" WindowStartupLocation="CenterScreen"
     UseLayoutRounding="True" SnapsToDevicePixels="True"
         Loaded="Window_Loaded" Closing="Window_Closing">
     <Grid Margin="10">
@@ -133,7 +133,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Buttons directly under panes -->
-            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8">
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40,0,0,8">
                 <Button x:Name="BtnLoadFiles" Content="Load Files…" Click="BtnLoadFiles_Click" Padding="10,4" />
                 <Rectangle Width="1" Height="26" Fill="Gray" Margin="12,0,12,0" VerticalAlignment="Center" />
 
@@ -195,12 +195,34 @@
                         </StackPanel>
 
                         <!-- LSM Device Type -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
                             <TextBlock Text="LSM Device Type:" VerticalAlignment="Center" Width="140" Margin="0,0,6,0"/>
                             <ComboBox x:Name="CmbLsmDeviceType" Width="200" SelectedIndex="0" SelectionChanged="CmbLsmDeviceType_SelectionChanged">
                                 <ComboBoxItem Content="Osram 2.0"/>
                                 <ComboBoxItem Content="Osram 2.05"/>
                                 <ComboBoxItem Content="Nichia"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- ECU Variant -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <TextBlock Text="ECU Variant:" VerticalAlignment="Center" Width="140" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbEcuVariant" Width="200" SelectedIndex="0" SelectionChanged="CmbEcuVariant_SelectionChanged">
+                                <ComboBoxItem Content="MB PLU-HD 1.0 LH"/>
+                                <ComboBoxItem Content="MB PLU-HD 1.0 RH"/>
+                                <ComboBoxItem Content="MB PLU-HD 2.0 LH"/>
+                                <ComboBoxItem Content="MB PLU-HD 2.0 RH"/>
+                                <ComboBoxItem Content="MB CHLC 1.0"/>
+                                <ComboBoxItem Content="MB CHLC 2.0"/>
+                                <ComboBoxItem Content="GM MLD 1.0 PLUS"/>
+                                <ComboBoxItem Content="GM MLD 1.0 STANDARD"/>
+                                <ComboBoxItem Content="GM MLD 1.0 MINI"/>
+                                <ComboBoxItem Content="MB PLU 1.0 LH"/>
+                                <ComboBoxItem Content="MB PLU 1.0 RH"/>
+                                <ComboBoxItem Content="MB PLU 2.0 LH"/>
+                                <ComboBoxItem Content="MB PLU 2.0 RH"/>
+                                <ComboBoxItem Content="MB HLI 1.0 LH"/>
+                                <ComboBoxItem Content="MB HLI 1.0 RH"/>
                             </ComboBox>
                         </StackPanel>
                     </StackPanel>
@@ -209,32 +231,64 @@
                 <!-- 2. Application Settings -->
                 <GroupBox Grid.Column="1" Header="Application Settings" Padding="10" Margin="0,0,8,0" MinWidth="320">
                     <StackPanel Orientation="Vertical">
-                        <!-- Row 1: FPS, B Δ, Force dead pixel ID -->
+                        <!-- FPS -->
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
-                            <TextBlock Text="FPS:" VerticalAlignment="Center" Width="60" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtFps" Width="60" Text="100" Margin="0,0,12,0"/>
+                            <TextBlock Text="FPS:" VerticalAlignment="Center" Width="160" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtFps" Width="80" Text="100"/>
+                        </StackPanel>
 
-                            <TextBlock Text="B Δ:" VerticalAlignment="Center" Width="40" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtBDelta" Width="60" Text="0" Margin="0,0,12,0" TextChanged="BDelta_TextChanged"/>
+                        <!-- Deviation value (formerly B Δ) -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Deviation value:" VerticalAlignment="Center" Width="160" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtBDelta" Width="80" Text="0" TextChanged="BDelta_TextChanged"/>
+                        </StackPanel>
 
-                            <TextBlock Text="Force dead pixel ID:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <!-- Deviation threshold -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Deviation threshold:" VerticalAlignment="Center" Width="160" Margin="0,0,6,0"/>
+                            <Border BorderBrush="#ABADB3" BorderThickness="1" Background="White" CornerRadius="2">
+                                <Grid Width="80" Height="24">
+                                    <TextBox x:Name="TxtDiffThr" Text="0" 
+                                             BorderThickness="0" 
+                                             Background="Transparent"
+                                             VerticalContentAlignment="Center"
+                                             Padding="4,0,24,0"
+                                             TextChanged="TxtDiffThr_TextChanged"/>
+                                    <StackPanel Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="18">
+                                        <RepeatButton x:Name="BtnDiffThrUp" Content="▲" 
+                                                    FontSize="6" 
+                                                    Height="12" 
+                                                    Padding="0" 
+                                                    BorderThickness="0,0,0,0.5"
+                                                    Click="BtnDiffThrUp_Click"/>
+                                        <RepeatButton x:Name="BtnDiffThrDown" Content="▼" 
+                                                    FontSize="6" 
+                                                    Height="12" 
+                                                    Padding="0" 
+                                                    BorderThickness="0"
+                                                    Click="BtnDiffThrDown_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Force dead pixel ID -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="Force dead pixel ID:" VerticalAlignment="Center" Width="160" Margin="0,0,6,0"/>
                             <TextBox x:Name="TxtDeadPixelId" Width="80" Text="0" TextChanged="TxtDeadPixelId_TextChanged"/>
                         </StackPanel>
 
-                        <!-- Row 2: Deviation threshold slider -->
+                        <!-- Dark pixel compensation -->
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
-                            <TextBlock Text="Deviation threshold:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Slider x:Name="SldDiffThr" Minimum="0" Maximum="255" Value="0" Width="180" Margin="0,0,6,0" ValueChanged="SldDiffThr_ValueChanged"/>
-                            <TextBlock x:Name="LblDiffThr" Width="34" TextAlignment="Right" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Row 3: Checkboxes -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
                             <CheckBox x:Name="ChkDarkPixelComp" Content="Dark pixel compensation" IsChecked="False" VerticalAlignment="Center"
                                       ToolTip="Boost neighbors around dark pixels: +15% (N/S/E/W), +10% (diagonals), +5% (2-step N/S/E/W)"
-                                      Margin="0,0,12,0" Checked="ChkDarkPixelComp_Changed" Unchecked="ChkDarkPixelComp_Changed" />
+                                      Checked="ChkDarkPixelComp_Changed" Unchecked="ChkDarkPixelComp_Changed" />
+                        </StackPanel>
 
-                            <CheckBox x:Name="ChkZeroZeroWhite" Content="(0=0)→white" IsChecked="False" VerticalAlignment="Center"
+                        <!-- Comparison option -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <CheckBox x:Name="ChkZeroZeroWhite" Content="Comparison option (0=0 →white, 255=255 → black)" IsChecked="False" VerticalAlignment="Center"
+                                      ToolTip="When enabled: A=0 and B=0 renders white in Compare pane; A=255 and B=255 renders black in Compare pane"
                                       Checked="ChkZeroZeroWhite_Changed" Unchecked="ChkZeroZeroWhite_Changed"/>
                         </StackPanel>
                     </StackPanel>
@@ -257,9 +311,37 @@
                         </StackPanel>
 
                         <!-- Destination MAC -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
                             <TextBlock Text="Destination MAC:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
                             <TextBox x:Name="TxtDstMac" Width="160" Text="01:00:5E:16:00:12" TextChanged="TxtMac_TextChanged"/>
+                        </StackPanel>
+
+                        <!-- VLAN ID -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="VLAN ID:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtVlanId" Width="80" Text="70" TextChanged="TxtAvtpHeader_TextChanged"
+                                     ToolTip="802.1Q VLAN ID (0-4095)"/>
+                        </StackPanel>
+
+                        <!-- VLAN Priority -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="VLAN Priority:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtVlanPriority" Width="80" Text="5" TextChanged="TxtAvtpHeader_TextChanged"
+                                     ToolTip="802.1Q Priority Code Point (0-7)"/>
+                        </StackPanel>
+
+                        <!-- AVTP EtherType -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                            <TextBlock Text="AVTP EtherType:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtAvtpEtherType" Width="80" Text="0x22F0" TextChanged="TxtAvtpHeader_TextChanged"
+                                     ToolTip="AVTP EtherType (hex, e.g. 0x22F0)"/>
+                        </StackPanel>
+
+                        <!-- Stream ID last byte -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <TextBlock Text="Stream ID byte:" VerticalAlignment="Center" Width="110" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtStreamIdLastByte" Width="80" Text="0x50" TextChanged="TxtAvtpHeader_TextChanged"
+                                     ToolTip="Last byte of AVTP Stream ID (hex, e.g. 0x50)"/>
                         </StackPanel>
                     </StackPanel>
                 </GroupBox>

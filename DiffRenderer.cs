@@ -118,6 +118,15 @@ public static class DiffRenderer
             return;
         }
 
+        // Optional special case: full brightness A (255) == full brightness B (255) -> black D (0)
+        if (zeroZeroIsWhite && a == 255 && b == 255)
+        {
+            bl = 0;
+            g = 0;
+            r = 0;
+            return;
+        }
+
         // Dark pixel detection: A has signal, but B is forced to 0.
         // Make it visually obvious regardless of threshold.
         if (a > 0 && b == 0)

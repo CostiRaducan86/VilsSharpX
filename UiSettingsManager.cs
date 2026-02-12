@@ -99,7 +99,12 @@ public sealed class UiSettingsManager
         int modeOfOperation,
         string srcMac,
         string dstMac,
-        int lsmDeviceType = 0)
+        int lsmDeviceType = 0,
+        int ecuVariant = 0,
+        int vlanId = 70,
+        int vlanPriority = 5,
+        string avtpEtherType = "0x22F0",
+        string streamIdLastByte = "0x50")
     {
         return new AppSettings
         {
@@ -115,7 +120,12 @@ public sealed class UiSettingsManager
             ModeOfOperation = modeOfOperation,
             SrcMac = srcMac,
             DstMac = dstMac,
-            LsmDeviceType = lsmDeviceType
+            LsmDeviceType = lsmDeviceType,
+            EcuVariant = ecuVariant,
+            VlanId = vlanId,
+            VlanPriority = vlanPriority,
+            AvtpEtherType = avtpEtherType,
+            StreamIdLastByte = streamIdLastByte
         };
     }
 }

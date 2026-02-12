@@ -108,12 +108,13 @@ namespace VideoStreamPlayer
         }
 
         /// <summary>
-        /// Updates the enabled state of the NIC combo based on mode.
+        /// Updates the enabled state of the NIC combo.
+        /// NIC selection is always enabled regardless of mode (needed for TX device selection in Player mode too).
         /// </summary>
         public void UpdateLiveUiEnabledState(ComboBox? cmbLiveNic, bool isLiveMode)
         {
             if (cmbLiveNic != null)
-                cmbLiveNic.IsEnabled = isLiveMode;
+                cmbLiveNic.IsEnabled = true;
         }
     }
 }
