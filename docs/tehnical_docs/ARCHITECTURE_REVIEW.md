@@ -18,6 +18,7 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ## 1. System Overview
 
 ### 1.1 Functional Scope
+
 - **Dual Input Sources**:
   - Live Ethernet AVTP packet capture via SharpPcap (protocol: RVF, ethertype 0x22F0)
   - File-based playback (PGM, AVI, PCAP records, procedural scenes/sequences)
@@ -43,6 +44,7 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
   - File-based diagnostics (diagnostic.log, crash.log)
 
 ### 1.2 Resolution / Format Constraints
+
 - **Frame Dimensions**: 320×80 (active), 320×84 (LVDS with 4 metadata rows cropped)
 - **Pixel Format**:
   - Source (A, B): Gray8 (8-bit grayscale)
@@ -54,9 +56,11 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ## 2. Architectural Layers
 
 ### 2.1 Data Input Layer
+
 **Responsibility**: Frame source acquisition
 
 **Components**:
+
 - **AvtpLiveCapture** (Ethernet)
   - Background thread running `Task.Run(...)`
   - Uses SharpPcap for NIC-level packet sniffing
@@ -76,9 +80,11 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ---
 
 ### 2.2 Network & Protocol Layer
+
 **Responsibility**: AVTP packet parsing, RVF protocol semantics
 
 **Components**:
+
 - **AvtpRvfParser**
   - Stateless parser: `TryParseAvtpRvfEthernet(byte[] packet) → RvfChunk?`
   - Extracts payload from Ethernet frame
@@ -93,6 +99,7 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
   - **Safety**: Input validation (bounds-checking on chunk size, line numbers within [1, H])
 
 **Protocol Assumptions**:
+
 - Ethertype: `0x22F0`
 - Resolution: Hardcoded 320×80 (per device type, configurable via LSM Device dropdown)
 - Chunk Payload: `numLines × width` bytes (Gray8)
@@ -101,9 +108,11 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ---
 
 ### 2.3 Frame Processing Layer
+
 **Responsibility**: Frame buffer management, pixel-level computation
 
 **Components**:
+
 - **Frame** (Data Container)
   - Dual Gray8 buffers: `_pixelsA[320×80]`, `_pixelsB[320×80]`
   - Single BGR24 buffer: `_pixelsDiff[320×80×3]`
@@ -130,9 +139,11 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ---
 
 ### 2.4 Rendering & UI Update Layer
+
 **Responsibility**: Pixel-to-screen display, thread marshaling
 
 **Components**:
+
 - **WriteableBitmap** (Direct Pixel API)
   - Format: `PixelFormats.Gray8` (A, B), `PixelFormats.Bgr24` (D)
   - Dimensions: 320×80 (device-configurable)
@@ -150,7 +161,8 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
   - Uses Canvas overlay for non-destructive annotation
 
 - **Concurrency Model**:
-  ```
+
+  ```text
   [Background Thread]
     Frame computation → Blit() scheduled
     ↓ (Dispatcher.Invoke)
@@ -163,7 +175,9 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ### 2.5 User Interface Layer
 
 #### Left Pane (60%)
+
 **3 Frame Viewers**:
+
 - **A (Top, full width)**: AVTP Source (Gray8)
 - **B (Bottom-left)**: LVDS Source (Gray8)
 - **D (Bottom-right)**: Diff/Comparison (BGR24)
@@ -198,6 +212,7 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
    - Stream ID byte: last byte of AVTP stream ID
 
 #### Right Pane (40%)
+
 **Two Monitoring Panels**:
 
 1. **CAN/UART Communication** (Top, spans ~50% of right pane height):
@@ -215,33 +230,40 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ### 2.6 Support & Utility Layer
 
 **PixelInspector**:
+
 - Hover callback: tracks mouse position, reads pixel value at coordinates
 - Overlay display: shows `(X, Y) = value` annotation
 
 **UiSettingsManager**:
+
 - Persistence: saves/loads UI state (last mode, device type, control values)
 - Flag: `IsLoading` to suppress event handlers during startup
 
 **FrameSnapshotSaver**:
+
 - Exports current frame to PNG + metadata Excel (`frameSnapshots/` folder)
 - Contains: timestamp, frame count, device type, diff threshold
 
 **RecordingManager**:
+
 - Encodes live frame stream to AVI (SharpAvi library)
 - Frame rate: configurable (100 fps default)
 - Output: `videoRecords/` folder
 
 **DiagnosticLogger**:
+
 - File append-only: `diagnostic.log`, `crash.log`
 - Captures: AVTP frame activity, timing stats, error traces
 - No console (WinExe), all output to files
 
 **AvtpTransmitManager** (TX Path):
+
 - Builds AVTP/RVF packets: Ethernet → VLAN → RVF payload
 - MAC addresses, EtherType, Stream ID from UI controls
 - Sends via NIC (requires admin privileges for raw packet injection)
 
 **LiveNicSelector** & **NetworkInterfaceUtils**:
+
 - Enumerates network interfaces
 - Status monitoring (up/down)
 - Refresh on demand
@@ -251,7 +273,8 @@ VilsSharpX is a dual-mode **8-bit grayscale frame visualization** application de
 ## 3. Data Flow Diagrams
 
 ### 3.1 Live Capture (AVTP) Data Flow
-```
+
+```text
 Ethernet NIC
   ├─ Packet sniff (SharpPcap, ethertype 0x22F0)
   │
@@ -280,7 +303,8 @@ WPF Render Pipeline → Screen Display
 ```
 
 ### 3.2 File Playback Data Flow
-```
+
+```text
 File picker → Load file (PGM/AVI/PCAP/Scene)
   │
 SourceLoaderHelper
@@ -305,7 +329,8 @@ Screen Display
 ```
 
 ### 3.3 AVTP TX Data Flow
-```
+
+```text
 User input:
   ├─ Src/Dst MAC (TxtSrcMac, TxtDstMac)
   ├─ VLAN ID/Priority (TxtVlanId, TxtVlanPriority)
@@ -326,6 +351,7 @@ Ethernet → Receiver (DUT, test bench)
 ## 4. Concurrency & Synchronization
 
 ### 4.1 Threading Model
+
 - **Background Thread** (Live Capture):
   - Runs `Task.Run(async () => { AvtpLiveCapture.Run(token); })`
   - Blocked on NIC receive (SharpPcap event-driven)
@@ -336,6 +362,7 @@ Ethernet → Receiver (DUT, test bench)
   - Handles all UI updates via `Dispatcher.Invoke()`
 
 - **Thread Interaction**:
+
   ```csharp
   // Background thread
   await Task.Run(() => {
@@ -349,7 +376,9 @@ Ethernet → Receiver (DUT, test bench)
   ```
 
 ### 4.2 Synchronization Primitives
+
 - **_frameLock** (object): Protects Frame buffer access
+
   ```csharp
   lock (_frameLock) {
       _latestA = newFrame;
@@ -358,15 +387,18 @@ Ethernet → Receiver (DUT, test bench)
   ```
 
 - **Volatile Fields**:
+
   - `_loopPlayingEnabled`: User toggle
   - `_bValueDelta`: Live adjustment (B offset)
   - `_diffThreshold`: Threshold slider input
 
 - **Events** (not locks):
+
   - `OnFrameReady(Frame, metadata)`: Async frame notification
   - BackgroundWorker pattern deprecated in favor of async/await
 
 ### 4.3 Race Condition Mitigation
+
 - **Frame Buffer Cloning**: `Frame` constructor copies pixel arrays
   - Eliminates shared-buffer issues
   - Trade-off: Copy overhead (~28 KB per frame @ 320×80)
@@ -383,18 +415,21 @@ Ethernet → Receiver (DUT, test bench)
 ## 5. Key Design Patterns
 
 ### 5.1 Separation of Concerns
+
 - **Network**: AvtpLiveCapture, AvtpRvfParser (no UI dependency)
 - **Processing**: DiffRenderer, ZoomPanManager, PlaybackStateManager (stateless/pure)
 - **Rendering**: WriteableBitmap, Blit() (high-speed pixel ops)
 - **UI**: MainWindow (presentation + event marshaling only)
 
 ### 5.2 Dual-Mode Architecture
+
 - **Abstraction**: `IFrameSource` interface (implicit, not explicit)
   - Live: AvtpLiveCapture (push model, events)
   - File: PlaybackStateManager (pull model, callbacks)
 - **Benefit**: Seamless switching, shared rendering pipeline
 
 ### 5.3 Manager Pattern
+
 - **Delegation**: MainWindow delegates to specialized managers:
   - `PlaybackStateManager`: Timing, FPS
   - `LiveCaptureManager`: AVTP sniffing
@@ -404,6 +439,7 @@ Ethernet → Receiver (DUT, test bench)
 - **Motivation**: Single Responsibility, testability
 
 ### 5.4 Observable Pattern (WPF Binding - Future)
+
 - Currently: Direct control event handlers (TextChanged, SelectionChanged)
 - Opportunity: Migrate to MVVM (ViewModel, INotifyPropertyChanged) for better testability
 
@@ -412,6 +448,7 @@ Ethernet → Receiver (DUT, test bench)
 ## 6. Performance Characteristics
 
 ### 6.1 Frame Rate
+
 - **Target**: 100 fps (configurable via TxtFps)
 - **Measurement**: EMA-based (α=0.30, window=0.25s)
 - **Bottlenecks**:
@@ -420,6 +457,7 @@ Ethernet → Receiver (DUT, test bench)
   - Zoom/pan transform: affine math overhead (negligible if not per-pixel)
 
 ### 6.2 Latency
+
 - **Live Capture Path**: Ethernet → Parse → Reassemble → Blit → Screen
   - ~10–30 ms typical (depends on OS scheduler, display refresh rate)
   
@@ -427,6 +465,7 @@ Ethernet → Receiver (DUT, test bench)
   - ~5–10 ms (no I/O blocking if file cached)
 
 ### 6.3 Memory
+
 - **Frame Buffers**: 3× (320×80 Gray8) + 1× (320×80 BGR24) ≈ 128 KB
 - **UI Controls**: ~50 KB (XAML objects, TextBox, ComboBox)
 - **Total Runtime**: ~20–30 MB (including .NET Framework overhead)
@@ -436,25 +475,31 @@ Ethernet → Receiver (DUT, test bench)
 ## 7. Protocol & Constraints
 
 ### 7.1 AVTP/RVF Protocol
+
 - **Ethertype**: `0x22F0` (proprietary)
 - **Payload Structure**:
-  ```
+
+  ```text
   [Ethernet Header] [VLAN Tag (optional)] [RVF Header] [Chunk Data]
   ```
+
   - RVF Header: sequence number, frame ID, line index, chunk size
   - Chunk Data: `numLines × width` bytes (Gray8)
 
 - **Reassembly**:
+
   - Line 1-based indexing
   - Out-of-order tolerance (frame completed when all lines received)
   - Gap detection: missing line → frame copy + emit
 
 ### 7.2 Resolution Constraints
+
 - **Fixed Resolution**: 320×80 (active) or 320×84 (LVDS with metadata)
 - **Hardcoded** in `RvfProtocol.W/H`, enforced by RvfReassembler
 - **Future**: Device type dropdown allows config, but current binary uses single resolution
 
 ### 7.3 Pixel Format Guarantees
+
 - **Input (A, B)**: Always Gray8 (1 byte per pixel)
 - **Output (D)**: Always BGR24 (3 bytes per pixel, color space)
 - **Conversion**: DiffRenderer handles Gray8 → BGR24 mapping
@@ -476,16 +521,19 @@ Ethernet → Receiver (DUT, test bench)
 ## 9. Improvement Opportunities
 
 ⚠️ **CAN/UART Monitor** (Placeholder)  
+
 - Currently: Empty ListView template
 - Next: Integrate CAN database decoder, UART HW module interface
 - Impact: Enable real-time system diagnostics alongside video
 
 ⚠️ **PGM Loader** (Fragile)  
+
 - Current: "Skip 4 newlines" heuristic (not robust for all PGM variants)
 - Improvement: Full P2/P5 parser with error handling
 - Impact: Support broader image library, better error reporting
 
 ⚠️ **No Unit Tests**  
+
 - Validation currently: manual runtime observation
 - Opportunity: Add integration tests for:  
   - RvfReassembler (line sequencing, gap detection)
@@ -494,16 +542,19 @@ Ethernet → Receiver (DUT, test bench)
 - Impact: Regression prevention, easier refactoring
 
 ⚠️ **AVTP TX Simplicity**  
+
 - Current: Basic packet builder (no AVB/TSN features)
 - Future: Add scheduling, bandwidth reservation, audio sync
 - Impact: Automotive-grade compliance (SOME/IP, TSN integration)
 
 ⚠️ **Transform State Exposure**  
+
 - Zoom/pan currently: private to ZoomPanManager
 - Opportunity: Export transform matrix for plugins/external visualization
 - Impact: Extensibility for research/analysis tools
 
 ⚠️ **Settings Persistence**  
+
 - Currently: Partial (UiSettingsManager)
 - Gap: No persistent window geometry, no workspace layouts
 - Improvement: Full app state save/restore
@@ -513,16 +564,19 @@ Ethernet → Receiver (DUT, test bench)
 ## 10. Recommendations
 
 ### Short Term (1–2 weeks)
+
 1. **Document CAN/UART Integration**: Define API/interface for future HW modules
 2. **Enhance Error Handling**: Add try-catch blocks in DiffRenderer, RvfReassembler
 3. **Performance Profiling**: Measure CPU/memory under sustained 100fps load
 
 ### Medium Term (1–3 months)
+
 1. **Unit Test Suite**: Target PlaybackStateManager, DiffRenderer, RvfReassembler
 2. **PGM Loader Hardening**: Robust P2/P5 parser with validation
 3. **MVVM Migration** (Phase 1): MainWindow → ViewModel layer (properties, commands)
 
 ### Long Term (3–6 months)
+
 1. **CAN/UART Implementation**: Full monitor integration with CANdb++
 2. **Plugin Architecture**: Expose transform matrix, frame hooks for custom renderers
 3. **AVB/TSN Support**: Upgrade AVTP TX for automotive networking standards

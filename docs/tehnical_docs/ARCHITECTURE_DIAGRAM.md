@@ -104,7 +104,7 @@ graph TB
 ## Color Legend
 
 | Color | Layer | Components |
-|-------|-------|------------|
+| ----- | ----- | ---------- |
 | Light Blue (`#e1f5ff`) | Data Sources | Ethernet, External input |
 | Light Orange (`#fff3e0`) | Network | SharpPcap, Protocol parsing |
 | Light Purple (`#f3e5f5`) | Processing | Reassembly, Frame assembly |
@@ -118,7 +118,8 @@ graph TB
 ## Key Data Paths
 
 ### 1. Live AVTP Capture Path
-```
+
+```text
 Ethernet NIC 
   → SharpPcap (sniff ethertype 0x22F0)
   → AvtpRvfParser (decode RVF chunks)
@@ -129,7 +130,8 @@ Ethernet NIC
 ```
 
 ### 2. File Playback Path
-```
+
+```text
 PGM/AVI/PCAP/Scene File
   → SourceLoaderHelper / Specialized Players
   → PlaybackStateManager (FPS scheduling)
@@ -139,7 +141,8 @@ PGM/AVI/PCAP/Scene File
 ```
 
 ### 3. AVTP TX Path
-```
+
+```text
 UI Controls (MAC/VLAN/EtherType inputs)
   → AvtpTransmitManager (packet assembly)
   → Ethernet NIC (transmit frames)

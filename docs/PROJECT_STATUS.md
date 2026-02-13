@@ -9,6 +9,7 @@
 VilsSharpX is a **pixel-accurate inspection tool** for 8-bit grayscale video frames in automotive ECU development:
 
 **Core Capabilities:**
+
 - Ingest frames from **AVTP/RVF** (Ethernet live capture or PCAP replay)
 - Support **Scene mode** (loops through image files for A/B toggle testing)
 - Support **AVI playback** as input source (indexed, uncompressed only)
@@ -27,9 +28,11 @@ VilsSharpX is a **pixel-accurate inspection tool** for 8-bit grayscale video fra
 ## 2. Current Architecture State
 
 ### 2.1 Comprehensive Documentation
+
 Recent architecture analysis produced detailed documentation:
 
 📄 **[ARCHITECTURE_DIAGRAM.md](tehnical_docs/ARCHITECTURE_DIAGRAM.md)**
+
 - Mermaid block diagram with 10 subgraphs
 - Color-coded layers (Ingress, Processing, Rendering, UI, Storage, Transmit)
 - 3 documented data flow paths:
@@ -38,6 +41,7 @@ Recent architecture analysis produced detailed documentation:
   3. UI → TX Manager → Packet Builder → Ethernet Send
 
 📄 **[ARCHITECTURE_REVIEW.md](tehnical_docs/ARCHITECTURE_REVIEW.md)**
+
 - 11-section technical review (~1200 lines, English)
 - Executive summary, system overview, 8 architectural layers
 - Concurrency model, design patterns, performance characteristics
@@ -47,9 +51,10 @@ Recent architecture analysis produced detailed documentation:
 - Short/Medium/Long-term recommendations
 
 ### 2.2 Architecture Layers
+
 The application follows a layered, manager-based architecture:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │ DATA SOURCES                                                │
 │  • Live Ethernet (SharpPcap)                               │
@@ -107,6 +112,7 @@ The application follows a layered, manager-based architecture:
 ```
 
 ### 2.3 Manager Classes (Separation of Concerns)
+
 - **PlaybackStateManager** – controls Start/Stop/Pause, coordinates source switching
 - **LiveCaptureManager** – owns AvtpLiveCapture, handles frame-ready events
 - **RecordingManager** – toggles recording, manages AviRecorder lifecycle
@@ -119,22 +125,26 @@ The application follows a layered, manager-based architecture:
 ## 3. Non-Negotiable Invariants
 
 **Resolution & Geometry:**
+
 - Width: **W = 320 px**
 - Active height: **H_ACTIVE = 80 px**
 - LVDS height: **H_LVDS = 84 px** (bottom 4 lines are metadata, cropped for display)
 - Frame size: **25,600 bytes** (320×80)
 
 **Threading & Concurrency:**
+
 - All WPF control updates must be on the UI thread (`Dispatcher.Invoke/BeginInvoke`)
 - Background loops run in `Task.Run(...)` with `CancellationToken` for clean shutdown
 - Frames are **cloned** on publish to avoid shared-buffer races
 
 **Protocol Constraints:**
+
 - AVTP ethertype: **0x22F0**
 - RVF reassembly: line numbers are **1-based**, chunk payload is `numLines * width` bytes
 - Frame-ready publishes a **copy** of the buffer (safe for multi-consumer)
 
 **Rendering & UX:**
+
 - Rendering: `WriteableBitmap`, `PixelFormats.Gray8`, nearest-neighbor scaling
 - Pixel inspector: letterbox-aware, pixel_ID is **1..(W*H_ACTIVE)**
 - Zoom/pan: per-pane, overlays stay aligned
@@ -144,9 +154,11 @@ The application follows a layered, manager-based architecture:
 ## 4. Recent UI Improvements (2026-01-16 Session)
 
 ### 4.1 Layout Redesign
+
 **Goal:** Add real-time monitoring panels without compromising main visualization
 
 **Changes:**
+
 - Grid layout changed from 2 columns to **3 columns** with proportions **3* : 3* : 4*** (60% left, 40% right)
 - Row 0: **Cadran A (AVTP)** spanning cols 0-1, **CAN/UART Communication** panel (col 2, RowSpan 2)
 - Row 1: **Cadran B (LVDS)** col 0, **Cadran D (DIFF)** col 1
@@ -155,18 +167,22 @@ The application follows a layered, manager-based architecture:
 **Result:** Clean visual separation, no overlap, proper alignment
 
 ### 4.2 CAN/UART Communication Panel (Right-Top)
+
 **Purpose:** Placeholder for future CAN/UART message monitoring
 
 **Implementation:**
+
 - GroupBox with ListView (currently empty)
 - Text translated to English: "CAN/UART Communication"
 - Column headers: "Timestamp", "Message Type", "ID", "Data"
 - Prepared for future population with CAN/UART frames
 
 ### 4.3 AVTP Status Panel (Right-Bottom)
+
 **Purpose:** Real-time AVTP diagnostics
 
 **Metrics:**
+
 - `LblStatus` – current state (e.g., "Running @ 30 fps")
 - `LblDiffStats` – diff statistics (e.g., "Diff max=42, avg=12.3")
 - `LblAvtpInFps` – AVTP input FPS
@@ -176,15 +192,18 @@ The application follows a layered, manager-based architecture:
 **New Location:** Dedicated panel in col 2, row 2 (aligned with config groups)
 
 ### 4.4 Config Group Proportions
+
 **Challenge:** 3 groups (Hardware, App Settings, Ethernet) had equal widths, causing text truncation and cramped controls
 
 **Solution:**
+
 - Changed from `Auto` width to **star-sizing** with proportions **5* : 2* : 3*** (50% / 20% / 30%)
 - **Hardware Config** (50%): Needs wide combo (Device type, NIC selection)
 - **App Settings** (20%): Small numeric inputs (FPS, threshold, pixel ID)
 - **Ethernet Config** (30%): Medium-width text boxes (MAC address, Stream ID)
 
 **Control Width Optimizations:**
+
 - NIC ComboBox: 160px → **80px** (with HorizontalAlignment="Stretch" for responsiveness)
 - MAC TextBoxes: 160px → **110px**
 - Label widths increased: Hardware/App Settings **110px**, Ethernet **85px**
@@ -193,6 +212,7 @@ The application follows a layered, manager-based architecture:
 **Result:** All text fully visible, no truncation, proportional scaling works correctly
 
 ### 4.5 Git Commit Baseline
+
 **Commit:** `8481453`  
 **Message:** `feat(ui): Add CAN/UART and AVTP Status panels with optimized layout`
 
@@ -203,7 +223,8 @@ The application follows a layered, manager-based architecture:
 ## 5. Data Flow (Detailed)
 
 ### 5.1 Live AVTP Capture Flow
-```
+
+```text
 Ethernet wire
   → AvtpLiveCapture (SharpPcap, filter ethertype 0x22F0)
     → AvtpRvfParser.TryParseAvtpRvfEthernet(pkt)
@@ -218,7 +239,8 @@ Ethernet wire
 **Important:** MainWindow uses `Dispatcher.Invoke` because `OnFrameReady` fires from SharpPcap's background thread.
 
 ### 5.2 PCAP Replay Flow
-```
+
+```text
 User clicks "Load Files…" → selects .pcap
   → PcapAvtpRvfReplay.Start()
     → background loop reads packets
@@ -227,7 +249,8 @@ User clicks "Load Files…" → selects .pcap
 ```
 
 ### 5.3 Scene Playback Flow
-```
+
+```text
 User clicks "Load Files…" → selects .scene
   → SceneLoader.Load(path) → parses steps + delays
     → ScenePlayer.Start()
@@ -238,7 +261,8 @@ User clicks "Load Files…" → selects .scene
 ```
 
 ### 5.4 AVI Playback Flow
-```
+
+```text
 User clicks "Load Files…" → selects .avi
   → AviUncompressedVideoReader opens AVI (requires idx1 chunk)
     → AviSourcePlayer.Start()
@@ -252,7 +276,8 @@ User clicks "Load Files…" → selects .avi
 **Pause behavior:** Prev/Next steps through AVI frames, UI updates immediately
 
 ### 5.5 Transmit Flow
-```
+
+```text
 User clicks "Toggle TX"
   → AvtpTransmitManager.Start()
     → AvtpRvfTransmitter starts background loop
@@ -267,9 +292,11 @@ User clicks "Toggle TX"
 ## 6. Key Features & Semantics
 
 ### 6.1 Compare/DIFF Semantics (CRITICAL)
+
 **Deviation Definition:** **B − A** (ECU output minus input)
 
 **Consistency Across:**
+
 - DIFF pane rendering (|A−B| with threshold)
 - Numeric overlay labels
 - XLSX report columns (`PixelValue_A`, `PixelValue_B`, `Diff_B_A`)
@@ -279,6 +306,7 @@ User clicks "Toggle TX"
 **Implementation:** `DiffRenderer.ComputeDiff(a, b, threshold)` → grayscale visualization where diff below threshold is black, above threshold is scaled.
 
 ### 6.2 (0=0)→White Mapping
+
 **Purpose:** Optional visualization enhancement
 
 **Behavior:** When both A and B are 0, render pixel as **white** (instead of black) in DIFF pane
@@ -288,21 +316,26 @@ User clicks "Toggle TX"
 **Use Case:** Quickly identify areas where both streams are inactive vs. areas with actual signal
 
 ### 6.3 Dark Pixel Detection
+
 **Definition:** **A > 0 && B == 0** (input has signal but ECU output is black)
 
 **Detection Points:**
+
 - During compare computation
 - During recording (tracked per frame)
 - During one-click Save
 
 **Reporting:**
+
 - Highlighted rows in XLSX report
 - Dedicated **`DarkPixels`** worksheet with pixel_ID, coordinates, A value
 
 ### 6.4 Dark Pixel Compensation
+
 **Purpose:** Simulate ECU correction by boosting neighbors around dark pixels
 
 **Cassandra-Style Kernel (applied to B before render/record):**
+
 - **+15%:** N/S/E/W neighbors at distance 1
 - **+10%:** Diagonal neighbors at distance 1
 - **+5%:** N/S/E/W at distance 2
@@ -314,6 +347,7 @@ User clicks "Toggle TX"
 **Effect Visibility:** Visible in DIFF pane, recorded in AVI, reflected in XLSX report
 
 ### 6.5 Force Dead Pixel ID
+
 **Purpose:** Simulate a specific pixel failure for testing
 
 **Behavior:** When set to a valid pixel_ID (1..25600), forces `B[pixel_ID] = 0` before compare/render
@@ -327,9 +361,11 @@ User clicks "Toggle TX"
 ## 7. Recording & Reporting
 
 ### 7.1 AVI Recording
+
 **Output Location:** `docs/outputs/videoRecords/`
 
 **Files Generated:**
+
 - `<timestamp>_A.avi` (AVTP/Generator stream)
 - `<timestamp>_B.avi` (LVDS stream with compensation applied if enabled)
 - `<timestamp>_D.avi` (DIFF stream)
@@ -339,14 +375,17 @@ User clicks "Toggle TX"
 **Frame Rate:** User-configurable (FPS textbox in App Settings group)
 
 **Recording Lifecycle:**
+
 1. User clicks "Record" → `RecordingManager.StartRecording()`
 2. Background loop: every frame ready → `AviRecorder.WriteFrame(a, b, d)`
 3. User clicks "Stop" → `AviRecorder.Finish()` → flushes + closes files
 
 ### 7.2 Compare Report (XLSX)
+
 **Output Location:** `docs/outputs/videoRecords/` (during recording) or `docs/outputs/frameSnapshots/` (one-click Save)
 
 **Report Structure:**
+
 - **Main Sheet:** `FrameNr_XX`
   - Columns: `PixelID`, `LinNr`, `ColNr`, `PixelValue_A`, `PixelValue_B`, `Diff_B_A`
   - All 25,600 pixels listed
@@ -357,9 +396,11 @@ User clicks "Toggle TX"
 **Generation:** `AviRecorder.GenerateCompareReport()` using ClosedXML
 
 ### 7.3 One-Click Frame Snapshot (Save Button)
+
 **Purpose:** Export currently displayed frame without starting full recording
 
 **Workflow:**
+
 1. User pauses playback
 2. Navigate with Prev/Next to desired frame
 3. Click **Save**
@@ -382,6 +423,7 @@ User clicks "Toggle TX"
 **Managed By:** `UiSettingsManager` (singleton)
 
 **Persisted Settings:**
+
 - Device type (Osram_1Chip / Nichia_1Chip)
 - NIC name (network interface for live capture)
 - FPS (recording frame rate)
@@ -392,6 +434,7 @@ User clicks "Toggle TX"
 - MAC address, Stream ID (Ethernet config)
 
 **Migration Logic:**
+
 - `AppSettings.Migrate()` ensures old defaults are updated:
   - Dark pixel compensation: **true → false**
   - (0=0)→white: **true → false**
@@ -399,6 +442,7 @@ User clicks "Toggle TX"
 **Load on Startup:** `UiSettingsManager.Load()` called in `MainWindow` constructor
 
 **Save Triggers:**
+
 - TextBox `LostFocus`
 - ComboBox `SelectionChanged`
 - CheckBox `Checked/Unchecked`
@@ -410,6 +454,7 @@ User clicks "Toggle TX"
 **App Type:** `WinExe` (no console window)
 
 **Log Files:**
+
 - **`diagnostic.log`** – runtime traces for AVTP/capture/reassembly
   - Written by `DiagnosticLogger.Log(msg)`
   - Append mode, timestamped entries
@@ -430,7 +475,8 @@ User clicks "Toggle TX"
 **File Extension:** `.scene`
 
 **Minimal Format:**
-```
+
+```text
 loop = true
 delayMs = 500
 
@@ -440,7 +486,8 @@ img3 = HighBeam_Lane_OS.pgm
 ```
 
 **Optional Per-Step Delay:**
-```
+
+```text
 img1 = black.bmp
 delayMs1 = 1000
 img2 = white.bmp
@@ -448,13 +495,16 @@ delayMs2 = 200
 ```
 
 **Comment Support:**
+
 - Lines starting with `//`, `#`, `;` are ignored
 
 **Path Resolution:**
+
 - Relative paths resolve against the `.scene` file directory
 - Absolute paths are supported
 
 **Legacy Compatibility:**
+
 - Old object-style scenes with `filename = "..."` still work
 
 **Implementation:** `SceneLoader.cs` + `ScenePlayer.cs`
@@ -466,33 +516,40 @@ delayMs2 = 200
 **Purpose:** Load pre-recorded AVI files as input source (pane A)
 
 **Requirements:**
+
 - AVI must be **indexed** (`idx1` chunk present)
 - Codec: **Uncompressed** only (8bpp Gray or 24/32bpp RGB converted to Gray8)
 
 **Supported Formats:**
+
 - 8bpp grayscale (direct copy)
 - 24bpp RGB (converted to Gray8 via `Bgr24→Gray8`)
 - 32bpp ARGB (converted to Gray8 via `Bgr32→Gray8`)
 
 **Crop Behavior:**
+
 - Frames are cropped to top-left **320×80** for display
 - If AVI dimensions < 320×80, only available pixels are used
 
 **Frame Timing:**
+
 - Uses AVI's inherent frame duration (from `MicroSecPerFrame` in AVI header)
 - Independent of the "FPS" textbox (which only affects recording)
 
 **Pause/Step Behavior:**
+
 - Prev/Next buttons step through AVI frames
 - UI updates immediately (no delay)
 
 **FPS Display:**
+
 - "Running @" label shows estimated **content change FPS**
 - Counts frame-to-frame differences per second (useful for detecting repeated frames)
 
 **Implementation:** `AviUncompressedVideoReader.cs` + `AviSourcePlayer.cs`
 
 **Known Limitations:**
+
 - No codec support (MJPEG, H.264, etc.) – only uncompressed
 - PGM loader uses simple heuristic for P5 binary format (skip 4 newlines) – may fail on malformed files
 
@@ -501,10 +558,12 @@ delayMs2 = 200
 ## 12. Key Files Reference
 
 ### 12.1 UI Layer
+
 - **`MainWindow.xaml`** – WPF layout (Grid, 3 columns, 3 rows), control definitions, default checkbox states
 - **`MainWindow.xaml.cs`** – code-behind, render pipeline, event handlers, frame processing orchestration
 
 ### 12.2 Network & Protocol
+
 - **`AvtpLiveCapture.cs`** – SharpPcap wrapper, ethertype 0x22F0 filter
 - **`AvtpRvfParser.cs`** – RVF packet parsing
 - **`RvfReassembler.cs`** – line-based frame reassembly, gap tracking
@@ -512,22 +571,26 @@ delayMs2 = 200
 - **`PcapAvtpRvfReplay.cs`** – PCAP file playback
 
 ### 12.3 Frame Processing
+
 - **`DiffRenderer.cs`** – compute |A−B| with threshold
 - **`DarkPixelCompensation.cs`** – Cassandra kernel implementation
 - **`BitmapUtils.cs`** – WriteableBitmap blitting (Gray8)
 - **`ImageUtils.cs`** – image conversion utilities
 
 ### 12.4 Rendering & UI
+
 - **`OverlayRenderer.cs`** – numeric overlays, pixel inspector
 - **`ZoomPanManager.cs`** – per-pane zoom/pan state
 - **`PixelInspector.cs`** – hover tooltips, pixel_ID calculations
 
 ### 12.5 Recording & Output
+
 - **`AviRecorder.cs`** – 3-stream AVI writer + XLSX report generation
 - **`FrameSnapshotSaver.cs`** – one-click Save (PNG + XLSX)
 - **`RecordingManager.cs`** – recording lifecycle orchestration
 
 ### 12.6 Playback Sources
+
 - **`SceneLoader.cs`** – parse `.scene` files
 - **`ScenePlayer.cs`** – loop through scene steps
 - **`AviSourcePlayer.cs`** – AVI playback orchestration
@@ -535,24 +598,28 @@ delayMs2 = 200
 - **`PgmLoader.cs`** – P2/P5 PGM file loading
 
 ### 12.7 Transmit
+
 - **`AvtpTransmitManager.cs`** – TX lifecycle orchestration
 - **`AvtpRvfTransmitter.cs`** – transmit loop
 - **`AvtpPacketBuilder.cs`** – construct RVF packets from frame
 - **`AvtpEthernetSender.cs`** – SharpPcap send wrapper
 
 ### 12.8 Managers & State
+
 - **`PlaybackStateManager.cs`** – Start/Stop/Pause coordination
 - **`LiveCaptureManager.cs`** – owns AvtpLiveCapture, frame-ready subscription
 - **`UiSettingsManager.cs`** – settings persistence
 - **`AppSettings.cs`** – settings model + migration
 
 ### 12.9 Utilities
+
 - **`DiagnosticLogger.cs`** – file-based logging
 - **`StatusFormatter.cs`** – format status strings for UI
 - **`NetworkInterfaceUtils.cs`** – enumerate NICs
 - **`SourceLoaderHelper.cs`** – unified file loading (PCAP/Scene/AVI/PGM/BMP)
 
 ### 12.10 Types & Enums
+
 - **`RvfTypes.cs`** – Frame, FrameMeta, RvfChunk structures
 - **`LsmDeviceType.cs`** – Osram_1Chip / Nichia_1Chip enum
 
@@ -561,6 +628,7 @@ delayMs2 = 200
 ## 13. Technical Debt & Improvement Opportunities
 
 ### 13.1 Identified Issues
+
 1. **PGM Loader Hardening**
    - Current P5 parser uses "skip 4 newlines" heuristic
    - Fails on malformed PGM files with non-standard comments
@@ -593,16 +661,19 @@ delayMs2 = 200
 ### 13.2 Recommendations by Timeline
 
 **Short-Term (1-2 weeks):**
+
 - Harden PGM loader with proper comment parsing
 - Add error handling for file I/O operations
 - Write unit tests for AvtpRvfParser and RvfReassembler
 
 **Medium-Term (1-2 months):**
+
 - Implement CAN/UART functional logic
 - Migrate core logic to ViewModels (MVVM)
 - Add performance metrics (FPS actual vs. target, frame drop %)
 
 **Long-Term (3+ months):**
+
 - Full unit test suite (>80% coverage)
 - Refactor to async/await where appropriate (reduce Dispatcher.Invoke overhead)
 - Add codec support for AVI playback (MJPEG, H.264 via FFmpeg)
@@ -612,6 +683,7 @@ delayMs2 = 200
 ## 14. How to Validate Quickly
 
 ### 14.1 Basic Smoke Test
+
 1. `dotnet build` (ensure no errors)
 2. `dotnet run`
 3. Load a known PCAP (`docs/inputs/AVTP_Trace_001_Osram.pcap`)
@@ -622,11 +694,13 @@ delayMs2 = 200
    - Status labels update (FPS, dropped count)
 
 ### 14.2 Scene Playback Test
+
 1. Load `docs/inputs/Black_LB_HB_LB.scene`
 2. Click "Start"
 3. Verify scene loops through images (500ms delay default)
 
 ### 14.3 AVI Playback Test
+
 1. Record a short AVI (toggle "Record" → wait 5 seconds → toggle "Stop")
 2. Load the generated `<timestamp>_A.avi`
 3. Verify:
@@ -635,6 +709,7 @@ delayMs2 = 200
    - "Running @" FPS displays content change rate
 
 ### 14.4 Dark Pixel Test
+
 1. Set "Dead pixel ID" to 100 (force pixel 100 to black in B)
 2. Click "Save"
 3. Open generated `.xlsx` report
@@ -644,12 +719,14 @@ delayMs2 = 200
    - Row is highlighted (yellow + bold)
 
 ### 14.5 Compensation Test
+
 1. Enable "Dark pixel compensation" checkbox
 2. Force a dead pixel (e.g., pixel 100)
 3. Observe DIFF pane:
    - Neighbors of pixel 100 should brighten (compensation kernel applied)
 
 ### 14.6 Zoom/Pan Test
+
 1. Mouse wheel on pane A → verify zoom in/out
 2. Left-click drag → verify pan
 3. Hover over pixel → verify tooltip shows correct pixel_ID + coordinates
@@ -660,30 +737,36 @@ delayMs2 = 200
 ## 15. Build & Run Commands
 
 **Prerequisites:**
+
 - .NET 8 SDK
 - Windows OS (WPF requirement)
 
 **Build:**
+
 ```powershell
 dotnet build
 ```
 
 **Run:**
+
 ```powershell
 dotnet run
 ```
 
 **Run with specific project file:**
+
 ```powershell
 dotnet run --project VilsSharpX.csproj
 ```
 
 **Clean:**
+
 ```powershell
 dotnet clean
 ```
 
 **Restore packages:**
+
 ```powershell
 dotnet restore
 ```
@@ -693,9 +776,11 @@ dotnet restore
 ## 16. Recent Session History (2026-01-16)
 
 ### 16.1 UI Layout Iteration
+
 **Objective:** Add CAN/UART monitoring and AVTP status panels without disrupting main visualization
 
 **Iterations:**
+
 1. Initial 60/40 split (2 columns) → CAN/UART and Status stacked in col 1
 2. Adjusted to 3 columns (3*, 3*, 4*) → separated CAN/UART (rows 0-1) and Status (row 2)
 3. Optimized config group proportions from equal widths to **5* : 2* : 3***
@@ -707,13 +792,16 @@ dotnet restore
 **Final Outcome:** Clean layout, no overlaps, all text visible, proportional scaling works correctly
 
 ### 16.2 Git Commit Baseline
+
 **Commit:** `8481453`  
 **Message:** `feat(ui): Add CAN/UART and AVTP Status panels with optimized layout`
 
 **Purpose:** Stable checkpoint for future development; all changes validated with `dotnet build`
 
 ### 16.3 Documentation Phase
+
 **Generated Files:**
+
 1. `docs/tehnical_docs/ARCHITECTURE_DIAGRAM.md` – Mermaid block diagram with 10 subgraphs
 2. `docs/tehnical_docs/ARCHITECTURE_REVIEW.md` – 11-section technical review (~1200 lines, English)
 3. `docs/PROJECT_STATUS.md` (this file) – comprehensive project state documentation
@@ -725,11 +813,13 @@ dotnet restore
 ## 17. Next Steps & Continuation Plan
 
 ### 17.1 Immediate Actions
+
 - ✅ **Commit updated PROJECT_STATUS.md** (if not done already)
 - **Test UI layout** on different screen resolutions (verify responsiveness)
 - **Validate documentation accuracy** (ensure all references are correct)
 
 ### 17.2 Short-Term Priorities
+
 1. **Implement CAN/UART functional logic**
    - Choose library (SocketCAN bridge, PCAN API, serial port reader)
    - Populate ListView with real CAN/UART frames
@@ -744,6 +834,7 @@ dotnet restore
    - Test RvfReassembler gap detection
 
 ### 17.3 Medium-Term Priorities
+
 1. **MVVM migration**
    - Extract ViewModels for PlaybackState, Settings, RecordingState
    - Reduce Dispatcher.Invoke calls
@@ -760,6 +851,7 @@ dotnet restore
    - Retry logic for network operations
 
 ### 17.4 Long-Term Vision
+
 - Full unit test suite (>80% coverage)
 - Codec support for AVI (MJPEG, H.264)
 - Plugin architecture for custom processing pipelines
@@ -770,6 +862,7 @@ dotnet restore
 ## 18. Key Decisions & Lessons Learned
 
 ### 18.1 Layout Design Decisions
+
 **Decision:** Use star-sizing (*) for columns instead of Auto  
 **Rationale:** Proportional scaling prevents controls from overflowing/truncating at different window sizes  
 **Lesson:** Always account for GroupBox padding + margins when calculating proportions
@@ -783,6 +876,7 @@ dotnet restore
 **Lesson:** Group width should match control requirements, not arbitrary equality
 
 ### 18.2 Architecture Decisions
+
 **Decision:** Manager-based separation of concerns  
 **Rationale:** Avoids monolithic code-behind, easier to test and maintain  
 **Lesson:** Managers should own lifecycle of their resources (e.g., LiveCaptureManager owns AvtpLiveCapture)
@@ -796,6 +890,7 @@ dotnet restore
 **Lesson:** Nearest-neighbor scaling + BackBufferLock for pixel-perfect zoom
 
 ### 18.3 Documentation Decisions
+
 **Decision:** Comprehensive PROJECT_STATUS.md instead of scattered README files  
 **Rationale:** Single source of truth for session recovery and onboarding  
 **Lesson:** Markdown links to architecture docs provide layered detail without overwhelming readers
@@ -811,6 +906,7 @@ dotnet restore
 **Project Maintainer:** (Add contact info if public)
 
 **Contributing:**
+
 - Follow C# coding conventions (PascalCase for public members, _camelCase for private fields)
 - Run `dotnet build` before committing to ensure no errors
 - Update PROJECT_STATUS.md if adding major features or architectural changes
@@ -823,6 +919,7 @@ dotnet restore
 ## 20. Appendix: External Dependencies
 
 **NuGet Packages:**
+
 - **SharpPcap** – packet capture (libpcap/Npcap wrapper)
 - **PacketDotNet** – protocol parsing
 - **SharpAvi** – AVI file writer
@@ -830,17 +927,17 @@ dotnet restore
 - **DocumentFormat.OpenXml** – Office Open XML manipulation
 
 **System Requirements:**
+
 - Windows 10/11 (WPF)
 - .NET 8 SDK
 - Npcap or WinPcap (for live capture)
 
 **Optional:**
+
 - Wireshark (for PCAP analysis)
 - CANoe/CANalyzer (for CAN trace generation)
 
 ---
-
-**End of PROJECT_STATUS.md**
 
 *For architecture details, see [ARCHITECTURE_DIAGRAM.md](tehnical_docs/ARCHITECTURE_DIAGRAM.md) and [ARCHITECTURE_REVIEW.md](tehnical_docs/ARCHITECTURE_REVIEW.md).*
 
