@@ -139,6 +139,17 @@ public sealed class LvdsUartCapture : IDisposable
         }
     }
 
+    /// <summary>
+    /// Send device-mode command to Pico 2 firmware.
+    /// 'N' = Nichia (12.5 Mbps), 'O' = Osram (20 Mbps).
+    /// </summary>
+    public void SendModeCommand(bool isNichia)
+    {
+        byte cmd = (byte)(isNichia ? 'N' : 'O');
+        Send(new[] { cmd });
+        _log?.Invoke($"[lvds-uart] sent mode command: {(char)cmd}");
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

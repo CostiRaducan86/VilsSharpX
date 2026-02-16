@@ -1,0 +1,105 @@
+;
+; PIO UART RX programs for LVDS bridge
+;
+; Two variants:
+;   uart_rx_8x  — 8× oversampling (12.5 Mbps @ 150 MHz sys_clk, div=1.5)
+;   uart_rx_4x  — 4× oversampling (20 Mbps   @ 150 MHz sys_clk, div=1.875)
+;
+; Both push one 8-bit byte into the RX FIFO per received UART frame.
+; Input pin: configurable (default = GPIO 2 = Channel 1 on LogicAnalyzer board).
+; Framing errors are silently discarded (no IRQ) to maximise throughput.
+;
+
+; ════════════════════════════════════════════════════════════════════════
+; 8× oversampling — 8 PIO cycles per bit period
+; ════════════════════════════════════════════════════════════════════════
+.program uart_rx_8x
+
+; Autopush is OFF; we push manually after 8 bits.
+; IN shifts right (LSB-first), 8-bit threshold.
+
+start:
+    wait 0 pin 0            ; Wait for start bit (line goes low)          [1 cy]
+    set  x, 7       [10]    ; Load bit counter = 8; delay 10             [11 cy]
+                              ; Total from falling edge to first sample:
+                              ;   1 (wait) + 1 (set) + 10 (delay) = 12 = 1.5 × 8
+                              ;   → we sample at the centre of bit 0
+bitloop:
+    in   pins, 1             ; Shift data pin into ISR (LSB-first)        [1 cy]
+    jmp  x--, bitloop [6]   ; Decrement counter; delay 6                 [7 cy]
+                              ;   1 (in) + 1 (jmp) + 6 (delay) = 8 cy/bit
+    jmp  pin, good_stop      ; If pin is high → valid stop bit            [1 cy]
+    ; Framing error — discard byte, wait for idle, restart
+    wait 1 pin 0
+    jmp  start
+good_stop:
+    push                      ; Push 8-bit byte from ISR to RX FIFO       [1 cy]
+    ; Fall through loops back to start (wait 0 pin 0 will block until next byte)
+
+% c-sdk {
+static inline void uart_rx_8x_program_init(PIO pio, uint sm, uint offset,
+                                            uint rx_pin, uint baud)
+{
+    pio_sm_set_consecutive_pindirs(pio, sm, rx_pin, 1, false);  // input
+    pio_gpio_init(pio, rx_pin);
+    gpio_pull_up(rx_pin);           // UART idle = high
+
+    pio_sm_config c = uart_rx_8x_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, rx_pin);
+    sm_config_set_jmp_pin(&c, rx_pin);
+    sm_config_set_in_shift(&c, true, false, 8);  // shift right (LSB-first), no autopush
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);  // double RX FIFO depth (8 words)
+
+    // Clock divider: PIO clock = baud × 8
+    float div = (float)clock_get_hz(clk_sys) / (baud * 8);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+
+; ════════════════════════════════════════════════════════════════════════
+; 4× oversampling — 4 PIO cycles per bit period
+; Used for 20 Mbps where 8× would require overclocking.
+; ════════════════════════════════════════════════════════════════════════
+.program uart_rx_4x
+
+start:
+    wait 0 pin 0            ; Wait for start bit                          [1 cy]
+    set  x, 7       [4]    ; Load bit counter; delay 4                   [5 cy]
+                              ; Total: 1 + 1 + 4 = 6 = 1.5 × 4
+                              ;   → we sample at the centre of bit 0
+bitloop:
+    in   pins, 1             ; Shift data pin into ISR                    [1 cy]
+    jmp  x--, bitloop [2]   ; Decrement; delay 2                         [3 cy]
+                              ;   1 (in) + 1 (jmp) + 2 (delay) = 4 cy/bit
+    jmp  pin, good_stop      ; Check stop bit                             [1 cy]
+    wait 1 pin 0
+    jmp  start
+good_stop:
+    push                      ; Push byte to RX FIFO
+
+% c-sdk {
+static inline void uart_rx_4x_program_init(PIO pio, uint sm, uint offset,
+                                            uint rx_pin, uint baud)
+{
+    pio_sm_set_consecutive_pindirs(pio, sm, rx_pin, 1, false);
+    pio_gpio_init(pio, rx_pin);
+    gpio_pull_up(rx_pin);
+
+    pio_sm_config c = uart_rx_4x_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, rx_pin);
+    sm_config_set_jmp_pin(&c, rx_pin);
+    sm_config_set_in_shift(&c, true, false, 8);  // LSB-first, no autopush
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    // Clock divider: PIO clock = baud × 4
+    float div = (float)clock_get_hz(clk_sys) / (baud * 4);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

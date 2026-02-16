@@ -195,6 +195,20 @@ public sealed class LvdsFrameReassembler
         // Osram:  CRC32 from _crcBuf[0..3], computed over _linePixels with seed
         // For now, we accept all lines regardless of CRC.
 
+        // CRC verification (diagnostic — count errors but don't discard data)
+        if (_isNichia && _crcLen >= 2)
+        {
+            if (!LvdsCrc.VerifyNichiaCrc(_linePixels, 0, _frameWidth,
+                                          _crcBuf[0], _crcBuf[1]))
+                _crcErrorCount++;
+        }
+        else if (!_isNichia && _crcLen >= 4)
+        {
+            if (!LvdsCrc.VerifyOsramCrc(_linePixels, 0, _frameWidth,
+                                         _crcBuf[0], _crcBuf[1], _crcBuf[2], _crcBuf[3]))
+                _crcErrorCount++;
+        }
+
         // ── Frame boundary detection ────────────────────────────────────
         // If this row was already received in the current frame,
         // we've wrapped around to the next frame → emit current + start fresh.

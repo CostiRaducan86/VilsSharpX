@@ -120,6 +120,10 @@ public sealed class LvdsLiveManager : IDisposable
                 _fpsSw.Restart();
 
                 _capture = LvdsUartCapture.Start(portName, _config, OnSerialData, _log);
+
+                // Tell Pico 2 firmware which UART mode to use
+                _capture.SendModeCommand(_config.IsNichia);
+
                 _log($"[lvds] capture started on {portName} for {_deviceType.GetDisplayName()}");
             }
             catch (Exception ex)
