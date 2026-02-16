@@ -14,7 +14,9 @@ extern "C" {
 
 /* ── MCU / board ─────────────────────────────────────────────────── */
 #define CFG_TUSB_MCU           OPT_MCU_RP2040   /* works for RP2350 too */
+#ifndef CFG_TUSB_OS
 #define CFG_TUSB_OS            OPT_OS_NONE
+#endif
 #define CFG_TUSB_RHPORT0_MODE  OPT_MODE_DEVICE
 
 /* ── Device class ────────────────────────────────────────────────── */

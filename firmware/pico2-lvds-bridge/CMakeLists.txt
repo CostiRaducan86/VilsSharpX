@@ -13,15 +13,15 @@ set(PICO_BOARD pico2)
 
 pico_sdk_init()
 
-# ── PIO program generation ──────────────────────────────────────────
-pico_generate_pio_header(pico2_lvds_bridge
-    ${CMAKE_CURRENT_LIST_DIR}/uart_rx.pio
-)
-
 # ── Main firmware ────────────────────────────────────────────────────
 add_executable(pico2_lvds_bridge
     main.c
     usb_descriptors.c
+)
+
+# ── PIO program generation (must be after add_executable) ────────────
+pico_generate_pio_header(pico2_lvds_bridge
+    ${CMAKE_CURRENT_LIST_DIR}/uart_rx.pio
 )
 
 target_include_directories(pico2_lvds_bridge PRIVATE

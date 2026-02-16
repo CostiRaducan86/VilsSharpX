@@ -39,6 +39,7 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "tusb.h"
+#include "bsp/board_api.h"
 
 // Generated from uart_rx.pio
 #include "uart_rx.pio.h"
