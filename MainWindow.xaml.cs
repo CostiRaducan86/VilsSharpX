@@ -1042,9 +1042,10 @@ namespace VilsSharpX
         private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
         {
             // Update LVDS stats labels
-            LblLvdsFrameCount.Text = $"Frames: {meta.FrameId}";
+            LblLvdsFrameCount.Text = $"Frames: {meta.FrameId} ({meta.LinesReceived}/{meta.LinesExpected} lines)";
             LblLvdsBytesReceived.Text = $"Bytes: {meta.TotalBytes:N0}";
-            LblLvdsSyncLoss.Text = $"Sync losses: {meta.SyncLosses}";
+            LblLvdsSyncLoss.Text = $"Sync: {meta.SyncLosses}  CRC: {meta.CrcErrors}  Parity: {meta.ParityErrors}";
+            LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
             LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
 
             // Store frame into _latestB for render
@@ -1065,7 +1066,8 @@ namespace VilsSharpX
                                cfg.Parity == System.IO.Ports.Parity.Odd ? "O" : "E";
             LblLvdsProtocol.Text = $"Protocol: {_currentDeviceType.GetDisplayName()}\n" +
                                    $"Baud: {cfg.BaudRate:N0} bps | {cfg.DataBits}{parityStr}1 | LSB-first\n" +
-                                   $"Frame: {cfg.FrameWidth}×{cfg.FrameHeight} → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
+                                   $"Line: [0x5D][row][{cfg.FrameWidth}px][CRC{cfg.CrcLen*8}] = {cfg.LinePacketLen} B\n" +
+                                   $"Frame: {cfg.FrameHeight} lines → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
         }
 
         // ── End LVDS ────────────────────────────────────────────────────────

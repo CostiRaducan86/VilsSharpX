@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 namespace VilsSharpX;
@@ -11,7 +12,8 @@ namespace VilsSharpX;
 ///     → captures TTL UART signal via PIO (post-LVDS receiver)
 ///     → forwards raw bytes over USB CDC (virtual COM port)
 ///     → LvdsUartCapture reads COM port
-///     → LvdsFrameReassembler parses sync/header/pixels
+///     → LvdsFrameReassembler parses per-line packets
+///       [0x5D][row_byte][W pixels][CRC]
 ///     → OnFrameReady event fires with cropped active-area frame
 ///     → MainWindow renders on Pane B
 ///
@@ -43,6 +45,13 @@ public sealed class LvdsLiveManager : IDisposable
     // Diagnostics
     private long _bytesReceived;
 
+    // FPS estimation (EMA-based, matching app convention)
+    private readonly double _fpsWindowSec;
+    private readonly double _fpsAlpha;
+    private readonly Stopwatch _fpsSw = new();
+    private int _fpsFrameCount;
+    private double _fpsEma;
+
     // ── Events ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -62,18 +71,31 @@ public sealed class LvdsLiveManager : IDisposable
     public int FrameWidth => _config.FrameWidth;
     public int ActiveHeight => _config.ActiveHeight;
 
+    /// <summary>Current LVDS FPS estimate (EMA-smoothed).</summary>
+    public double FpsEma => _fpsEma;
+
     // ── Construction ────────────────────────────────────────────────────
 
-    public LvdsLiveManager(LsmDeviceType deviceType, double signalLostTimeoutSec, Action<string> log)
+    public LvdsLiveManager(LsmDeviceType deviceType, double signalLostTimeoutSec, Action<string> log,
+                           double fpsWindowSec = 0.25, double fpsAlpha = 0.30)
     {
         _log = log ?? (_ => { });
         _deviceType = deviceType;
         _config = LvdsProtocol.GetUartConfig(deviceType);
         _signalLostTimeout = TimeSpan.FromSeconds(signalLostTimeoutSec);
+        _fpsWindowSec = fpsWindowSec;
+        _fpsAlpha = fpsAlpha;
 
         _lvdsFrame = new byte[_config.ActiveBytes];
-        _reassembler = new LvdsFrameReassembler(_config.FrameWidth, _config.FrameHeight, _config.ActiveHeight);
+        _reassembler = CreateReassembler(_config);
         _reassembler.OnFrameReady += OnReassembledFrame;
+    }
+
+    private static LvdsFrameReassembler CreateReassembler(LvdsUartConfig config)
+    {
+        return new LvdsFrameReassembler(
+            config.FrameWidth, config.FrameHeight, config.ActiveHeight,
+            config.CrcLen, config.IsNichia);
     }
 
     // ── Public API ──────────────────────────────────────────────────────
@@ -93,6 +115,9 @@ public sealed class LvdsLiveManager : IDisposable
                 _hasFrame = false;
                 _lastFrameUtc = DateTime.MinValue;
                 _bytesReceived = 0;
+                _fpsEma = 0;
+                _fpsFrameCount = 0;
+                _fpsSw.Restart();
 
                 _capture = LvdsUartCapture.Start(portName, _config, OnSerialData, _log);
                 _log($"[lvds] capture started on {portName} for {_deviceType.GetDisplayName()}");
@@ -137,12 +162,15 @@ public sealed class LvdsLiveManager : IDisposable
 
             // Rebuild reassembler and frame buffer for new dimensions
             _reassembler.OnFrameReady -= OnReassembledFrame;
-            _reassembler = new LvdsFrameReassembler(_config.FrameWidth, _config.FrameHeight, _config.ActiveHeight);
+            _reassembler = CreateReassembler(_config);
             _reassembler.OnFrameReady += OnReassembledFrame;
 
             _lvdsFrame = new byte[_config.ActiveBytes];
             _hasFrame = false;
             _lastFrameUtc = DateTime.MinValue;
+            _fpsEma = 0;
+            _fpsFrameCount = 0;
+            _fpsSw.Restart();
 
             _log($"[lvds] reconfigured for {deviceType.GetDisplayName()}: " +
                  $"{_config.FrameWidth}×{_config.ActiveHeight} @ {_config.BaudRate} baud");
@@ -175,7 +203,9 @@ public sealed class LvdsLiveManager : IDisposable
     {
         var r = _reassembler;
         return $"LVDS: port={ActivePort ?? "none"}, frames={r.FrameCount}, " +
-               $"syncLoss={r.SyncLossCount}, bytes={r.TotalBytesReceived:N0}";
+               $"syncLoss={r.SyncLossCount}, crcErr={r.CrcErrorCount}, " +
+               $"parityErr={r.ParityErrorCount}, fps={_fpsEma:F1}, " +
+               $"bytes={r.TotalBytesReceived:N0}";
     }
 
     /// <summary>
@@ -193,6 +223,17 @@ public sealed class LvdsLiveManager : IDisposable
 
     private void OnReassembledFrame(byte[] frame, LvdsFrameMeta meta)
     {
+        // Update FPS estimate
+        Interlocked.Increment(ref _fpsFrameCount);
+        if (_fpsSw.Elapsed.TotalSeconds >= _fpsWindowSec)
+        {
+            var sec = _fpsSw.Elapsed.TotalSeconds;
+            double instantFps = Interlocked.Exchange(ref _fpsFrameCount, 0) / sec;
+            _fpsSw.Restart();
+            _fpsEma = _fpsEma <= 0 ? instantFps
+                : _fpsEma * (1.0 - _fpsAlpha) + instantFps * _fpsAlpha;
+        }
+
         // Store latest frame
         if (frame.Length <= _lvdsFrame.Length)
         {

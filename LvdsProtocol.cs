@@ -2,23 +2,40 @@ namespace VilsSharpX;
 
 /// <summary>
 /// LVDS serial protocol constants for ECU↔LSM communication.
-/// The physical layer uses onsemi NBA3N011S (driver) / NBA3N012C (receiver) LVDS transceivers
-/// at 3.3V. The data layer is asynchronous UART (8-bit, LSB-first, non-inverted).
+///
+/// Protocol (per-line packet, confirmed by Saleae captures + ECU firmware source):
+///
+///   Nichia line packet (260 bytes):
+///     [0x5D] [addr|parity] [256 pixels] [CRC16_H] [CRC16_L]
+///     - Byte 0: sync = 0x5D
+///     - Byte 1: [odd_parity_bit:1][row_address:7]  (row 0 → 0x80)
+///     - Bytes 2..257: pixel data (X_PIX_NIC = 256)
+///     - Bytes 258..259: CRC16 over pixel data only (bytes 2..257)
+///       CRC16 algorithm: ioHwAbsTLD816K_Crc16 (poly TBD)
+///
+///   Osram line packet (326 bytes, tentative):
+///     [0x5D] [row_addr] [320 pixels] [CRC32 × 4 bytes]
+///     - Byte 0: sync = 0x5D
+///     - Byte 1: row address (raw, UART-level 8O1 handles parity)
+///     - Bytes 2..321: pixel data (320 px)
+///     - Bytes 322..325: CRC32 with seed (UART_APPL_2_CRC32_SEED_VALUE)
+///       Uses hardware __crc32lw intrinsic with __shuffle bit-reflection
+///
+///   Lines are sent sequentially row 0..H-1, with an idle gap between lines.
+///   CRC covers pixel data only (NOT sync/row byte).
+///
+/// Physical layer: onsemi NBA3N011S (driver) / NBA3N012C (receiver) LVDS
+/// transceivers at 3.3V. Data layer is asynchronous UART (8-bit, LSB-first,
+/// non-inverted).
 /// </summary>
 public static class LvdsProtocol
 {
     // ── Sync / framing ──────────────────────────────────────────────────
-    /// <summary>Start-of-frame sync byte 1 (observed in Saleae captures).</summary>
-    public const byte Sync0 = 0x5D;
+    /// <summary>Line sync byte (0x5D), first byte of every line packet.</summary>
+    public const byte SyncByte = 0x5D;
 
-    /// <summary>Start-of-frame sync byte 2 for ECU→LSM direction.</summary>
-    public const byte Sync1_Ecu = 0x53;
-
-    /// <summary>Start-of-frame sync byte 2 for LSM→ECU direction (response).</summary>
-    public const byte Sync1_Lsm = 0x33;
-
-    /// <summary>Minimum header length after sync bytes (to be refined after full protocol analysis).</summary>
-    public const int MinHeaderLen = 4;
+    /// <summary>Header bytes per line packet: sync(1) + row_byte(1).</summary>
+    public const int LineHeaderLen = 2;
 
     // ── Baud rates ──────────────────────────────────────────────────────
     /// <summary>Nichia LVDS baud rate: 12.5 Mbps, 8N1 (no parity).</summary>
@@ -41,6 +58,50 @@ public static class LvdsProtocol
     /// <summary>Metadata lines at bottom of LVDS frame to be cropped.</summary>
     public const int MetadataLines = 4;
 
+    // ── CRC ─────────────────────────────────────────────────────────────
+    /// <summary>Nichia per-line CRC: CRC16 (2 bytes), computed over pixel data only.</summary>
+    public const int NichiaCrcLen = 2;
+
+    /// <summary>Osram per-line CRC: CRC32 (4 bytes), computed over pixel data only.</summary>
+    public const int OsramCrcLen = 4;
+
+    // ── Row address helpers ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Extract the 7-bit row address from byte 1 of a Nichia line packet.
+    /// Format: [odd_parity_bit:1][row_address:7]
+    /// Example: row 0 → byte1 = 0x80 (parity=1, addr=0x00).
+    /// </summary>
+    public static int ExtractNichiaRow(byte rowByte) => rowByte & 0x7F;
+
+    /// <summary>
+    /// Compute the Nichia row byte from a row index (odd parity in MSB).
+    /// </summary>
+    public static byte MakeNichiaRowByte(int row)
+    {
+        byte addr = (byte)(row & 0x7F);
+        int ones = System.Numerics.BitOperations.PopCount((uint)addr);
+        // Odd parity: set MSB so total 1-bits (including parity) is odd
+        byte parity = (byte)((ones % 2 == 0) ? 0x80 : 0x00);
+        return (byte)(parity | addr);
+    }
+
+    /// <summary>
+    /// Verify the odd-parity bit in a Nichia row byte.
+    /// Returns true if parity is correct.
+    /// </summary>
+    public static bool VerifyNichiaRowParity(byte rowByte)
+    {
+        int ones = System.Numerics.BitOperations.PopCount((uint)rowByte);
+        return (ones % 2) == 1; // odd parity → total 1-bits must be odd
+    }
+
+    /// <summary>
+    /// Extract row address from byte 1 of an Osram line packet.
+    /// Osram uses 8O1 UART (hardware parity), so byte 1 is the raw row number.
+    /// </summary>
+    public static int ExtractOsramRow(byte rowByte) => rowByte;
+
     // ── UART parameters per device type ─────────────────────────────────
 
     /// <summary>
@@ -48,6 +109,7 @@ public static class LvdsProtocol
     /// </summary>
     public static LvdsUartConfig GetUartConfig(LsmDeviceType deviceType)
     {
+        bool isNichia = deviceType == LsmDeviceType.Nichia;
         return deviceType switch
         {
             LsmDeviceType.Nichia => new LvdsUartConfig
@@ -59,6 +121,8 @@ public static class LvdsProtocol
                 FrameWidth = NichiaW,
                 FrameHeight = NichiaH_Lvds,
                 ActiveHeight = NichiaH_Active,
+                CrcLen = NichiaCrcLen,
+                IsNichia = true,
             },
             // Osram 2.0 and 2.05 share the same UART parameters
             _ => new LvdsUartConfig
@@ -70,6 +134,8 @@ public static class LvdsProtocol
                 FrameWidth = OsramW,
                 FrameHeight = OsramH_Lvds,
                 ActiveHeight = OsramH_Active,
+                CrcLen = OsramCrcLen,
+                IsNichia = false,
             },
         };
     }
@@ -85,7 +151,7 @@ public sealed class LvdsUartConfig
     public System.IO.Ports.Parity Parity { get; init; }
     public System.IO.Ports.StopBits StopBits { get; init; }
 
-    /// <summary>Full LVDS frame width (pixels).</summary>
+    /// <summary>Full LVDS frame width (pixels per line).</summary>
     public int FrameWidth { get; init; }
 
     /// <summary>Full LVDS frame height including metadata lines.</summary>
@@ -93,6 +159,15 @@ public sealed class LvdsUartConfig
 
     /// <summary>Active (cropped) frame height.</summary>
     public int ActiveHeight { get; init; }
+
+    /// <summary>CRC bytes at the end of each line packet.</summary>
+    public int CrcLen { get; init; }
+
+    /// <summary>True for Nichia (row byte has software parity), false for Osram.</summary>
+    public bool IsNichia { get; init; }
+
+    /// <summary>Total bytes in a single line packet: sync(1) + row(1) + W + CRC.</summary>
+    public int LinePacketLen => LvdsProtocol.LineHeaderLen + FrameWidth + CrcLen;
 
     /// <summary>Total bytes in a full LVDS frame (width × height with metadata).</summary>
     public int FrameBytes => FrameWidth * FrameHeight;

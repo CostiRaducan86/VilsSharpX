@@ -1,45 +1,60 @@
 using System;
-using System.Buffers;
 
 namespace VilsSharpX;
 
 /// <summary>
 /// Reassembles LVDS UART byte stream into complete video frames.
 ///
-/// Protocol (inferred from Saleae captures — to be refined):
-///   [SYNC0=0x5D] [SYNC1=0x53] [HDR...] [PIXEL_DATA: W×H bytes] [optional checksum]
+/// Protocol (confirmed by Saleae captures + ECU firmware source):
+///   Each line is an independent packet:
+///     [0x5D] [row_byte] [pixel_0 .. pixel_{W-1}] [CRC (2 or 4 bytes)]
 ///
-/// The reassembler uses a state machine:
-///   WaitSync0 → WaitSync1 → ReadHeader → ReadPixels → EmitFrame → WaitSync0
+///   Nichia: 260 bytes/line (1+1+256+2), CRC16 over pixels only, 68 lines/frame
+///   Osram:  326 bytes/line (1+1+320+4), CRC32 over pixels only, 84 lines/frame
 ///
-/// Frame data is emitted as a cropped active-area buffer (metadata lines removed).
+///   Row byte encodes the line address:
+///     Nichia: [odd_parity_bit:1][row_address:7]  (row 0 = 0x80)
+///     Osram:  raw row address (UART hardware handles parity via 8O1)
+///
+///   Frame boundary: detected when all H lines received, or when a line
+///   that was already received appears again (rollover to next frame).
+///
+/// State machine (per-line):
+///   WaitSync → ReadRowByte → ReadPixels → ReadCrc → PlaceLine → (repeat)
 /// </summary>
 public sealed class LvdsFrameReassembler
 {
     // ── Configuration ───────────────────────────────────────────────────
     private readonly int _frameWidth;
-    private readonly int _frameHeightLvds;   // full LVDS height (incl. metadata)
+    private readonly int _frameHeightLvds;   // total lines (incl. metadata)
     private readonly int _activeHeight;       // cropped active height
-    private readonly int _metaLines;
+    private readonly int _crcLen;
+    private readonly bool _isNichia;
 
     // ── State machine ───────────────────────────────────────────────────
-    private enum State { WaitSync0, WaitSync1, ReadHeader, ReadPixels, SkipMetadata }
+    private enum State { WaitSync, ReadRowByte, ReadPixels, ReadCrc }
 
-    private State _state = State.WaitSync0;
+    private State _state = State.WaitSync;
 
-    // Header buffer (small, fixed)
-    private readonly byte[] _headerBuf = new byte[LvdsProtocol.MinHeaderLen];
-    private int _headerPos;
-
-    // Pixel accumulation buffer (W × H_LVDS)
-    private readonly byte[] _pixelBuf;
+    // Current line being parsed
+    private byte _currentRowByte;
+    private readonly byte[] _linePixels;      // pixel buffer for one line (W bytes)
     private int _pixelPos;
+    private readonly byte[] _crcBuf;          // CRC buffer for one line
+    private int _crcPos;
+
+    // ── Frame accumulation ──────────────────────────────────────────────
+    private readonly byte[] _frameBuf;        // W × H_LVDS pixel buffer
+    private readonly bool[] _lineReceived;    // which lines have been placed
+    private int _linesReceived;
 
     // Frame counter
     private uint _frameCount;
 
     // Diagnostic counters
     private int _syncLossCount;
+    private int _crcErrorCount;
+    private int _parityErrorCount;
     private long _totalBytesReceived;
 
     // ── Events ──────────────────────────────────────────────────────────
@@ -50,30 +65,33 @@ public sealed class LvdsFrameReassembler
     public event Action<byte[], LvdsFrameMeta>? OnFrameReady;
 
     /// <summary>
-    /// Creates a new LVDS frame reassembler.
+    /// Creates a new LVDS frame reassembler for line-based protocol parsing.
     /// </summary>
-    public LvdsFrameReassembler(int width, int lvdsHeight, int activeHeight)
+    public LvdsFrameReassembler(int width, int lvdsHeight, int activeHeight, int crcLen, bool isNichia)
     {
         _frameWidth = width;
         _frameHeightLvds = lvdsHeight;
         _activeHeight = activeHeight;
-        _metaLines = lvdsHeight - activeHeight;
+        _crcLen = crcLen;
+        _isNichia = isNichia;
 
-        int totalPixels = width * lvdsHeight;
-        _pixelBuf = new byte[totalPixels];
+        _linePixels = new byte[width];
+        _crcBuf = new byte[Math.Max(crcLen, 4)]; // at least 4 for CRC32
+        _frameBuf = new byte[width * lvdsHeight];
+        _lineReceived = new bool[lvdsHeight];
     }
 
-    /// <summary>
-    /// Total bytes expected for pixel data in a full LVDS frame.
-    /// </summary>
-    public int PixelBytesExpected => _frameWidth * _frameHeightLvds;
+    // ── Public API ──────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Active-area pixel count (what gets emitted).
-    /// </summary>
+    /// <summary>Active-area pixel count (what gets emitted).</summary>
     public int ActivePixelBytes => _frameWidth * _activeHeight;
 
-    // ── Public API ──────────────────────────────────────────────────────
+    public uint FrameCount => _frameCount;
+    public int SyncLossCount => _syncLossCount;
+    public int CrcErrorCount => _crcErrorCount;
+    public int ParityErrorCount => _parityErrorCount;
+    public long TotalBytesReceived => _totalBytesReceived;
+    public int LinesReceivedInCurrentFrame => _linesReceived;
 
     /// <summary>
     /// Push a chunk of received bytes into the reassembler.
@@ -89,132 +107,144 @@ public sealed class LvdsFrameReassembler
 
             switch (_state)
             {
-                case State.WaitSync0:
-                    if (b == LvdsProtocol.Sync0)
-                        _state = State.WaitSync1;
+                case State.WaitSync:
+                    if (b == LvdsProtocol.SyncByte)
+                    {
+                        _state = State.ReadRowByte;
+                    }
+                    // else: discard byte, stay in WaitSync
                     break;
 
-                case State.WaitSync1:
-                    if (b == LvdsProtocol.Sync1_Ecu || b == LvdsProtocol.Sync1_Lsm)
+                case State.ReadRowByte:
+                    if (b == LvdsProtocol.SyncByte)
                     {
-                        _headerBuf[0] = LvdsProtocol.Sync0;
-                        _headerBuf[1] = b;
-                        _headerPos = 2;
-                        _state = State.ReadHeader;
-                    }
-                    else if (b == LvdsProtocol.Sync0)
-                    {
-                        // Stay in WaitSync1 — could be a repeated sync byte
-                    }
-                    else
-                    {
+                        // Consecutive sync bytes — previous sync was noise; stay here
+                        // (this handles the case where a 0x5D in data is misinterpreted as sync)
                         _syncLossCount++;
-                        _state = State.WaitSync0;
+                        break;
                     }
-                    break;
-
-                case State.ReadHeader:
-                    if (_headerPos < _headerBuf.Length)
-                    {
-                        _headerBuf[_headerPos++] = b;
-                    }
-
-                    if (_headerPos >= LvdsProtocol.MinHeaderLen)
-                    {
-                        // Header complete — start pixel accumulation
-                        _pixelPos = 0;
-                        _state = State.ReadPixels;
-                    }
+                    _currentRowByte = b;
+                    _pixelPos = 0;
+                    _state = State.ReadPixels;
                     break;
 
                 case State.ReadPixels:
+                    _linePixels[_pixelPos++] = b;
+                    if (_pixelPos >= _frameWidth)
                     {
-                        // Accumulate pixel data up to the expected active area bytes.
-                        // We read W × ActiveHeight first (the visible image).
-                        int activeBytes = _frameWidth * _activeHeight;
-                        if (_pixelPos < activeBytes)
-                        {
-                            _pixelBuf[_pixelPos++] = b;
-                        }
-
-                        if (_pixelPos >= activeBytes)
-                        {
-                            if (_metaLines > 0)
-                            {
-                                // Still need to skip/consume metadata lines
-                                _pixelPos = 0; // reuse as skip counter
-                                _state = State.SkipMetadata;
-                            }
-                            else
-                            {
-                                EmitFrame();
-                            }
-                        }
+                        _crcPos = 0;
+                        _state = State.ReadCrc;
                     }
                     break;
 
-                case State.SkipMetadata:
+                case State.ReadCrc:
+                    _crcBuf[_crcPos++] = b;
+                    if (_crcPos >= _crcLen)
                     {
-                        int metaBytes = _frameWidth * _metaLines;
-                        _pixelPos++;
-                        if (_pixelPos >= metaBytes)
-                        {
-                            EmitFrame();
-                        }
+                        PlaceLine();
+                        _state = State.WaitSync;
                     }
                     break;
             }
         }
     }
 
-    /// <summary>
-    /// Convenience overload — push entire buffer.
-    /// </summary>
+    /// <summary>Convenience overload — push entire buffer.</summary>
     public void Push(byte[] data, int count) => Push(data, 0, count);
 
-    /// <summary>
-    /// Reset reassembler state (e.g. on device type change or reconnect).
-    /// </summary>
+    /// <summary>Reset reassembler state (e.g. on device type change or reconnect).</summary>
     public void Reset()
     {
-        _state = State.WaitSync0;
-        _headerPos = 0;
+        _state = State.WaitSync;
         _pixelPos = 0;
+        _crcPos = 0;
+        _linesReceived = 0;
         _syncLossCount = 0;
+        _crcErrorCount = 0;
+        _parityErrorCount = 0;
         _totalBytesReceived = 0;
         _frameCount = 0;
+        Array.Clear(_frameBuf);
+        Array.Clear(_lineReceived);
     }
 
-    // ── Diagnostics ─────────────────────────────────────────────────────
-    public uint FrameCount => _frameCount;
-    public int SyncLossCount => _syncLossCount;
-    public long TotalBytesReceived => _totalBytesReceived;
-
     // ── Internals ───────────────────────────────────────────────────────
+
+    private void PlaceLine()
+    {
+        // Extract row address
+        int row = _isNichia
+            ? LvdsProtocol.ExtractNichiaRow(_currentRowByte)
+            : LvdsProtocol.ExtractOsramRow(_currentRowByte);
+
+        // Verify Nichia row-byte parity (diagnostic only, don't discard line)
+        if (_isNichia && !LvdsProtocol.VerifyNichiaRowParity(_currentRowByte))
+        {
+            _parityErrorCount++;
+        }
+
+        // Bounds check — if row is outside expected range, treat as framing error
+        if (row < 0 || row >= _frameHeightLvds)
+        {
+            _syncLossCount++;
+            return;
+        }
+
+        // TODO: CRC verification (diagnostic only — don't discard data)
+        // Nichia: CRC16 = _crcBuf[0]<<8 | _crcBuf[1], computed over _linePixels[0..W-1]
+        // Osram:  CRC32 from _crcBuf[0..3], computed over _linePixels with seed
+        // For now, we accept all lines regardless of CRC.
+
+        // ── Frame boundary detection ────────────────────────────────────
+        // If this row was already received in the current frame,
+        // we've wrapped around to the next frame → emit current + start fresh.
+        if (_lineReceived[row] && _linesReceived > 0)
+        {
+            EmitFrame();
+        }
+
+        // Place pixel data into the correct row position in the frame buffer
+        Buffer.BlockCopy(_linePixels, 0, _frameBuf, row * _frameWidth, _frameWidth);
+
+        if (!_lineReceived[row])
+        {
+            _lineReceived[row] = true;
+            _linesReceived++;
+        }
+
+        // Also emit when all lines have been received (normal completion)
+        if (_linesReceived >= _frameHeightLvds)
+        {
+            EmitFrame();
+        }
+    }
 
     private void EmitFrame()
     {
         _frameCount++;
 
-        // Copy active area to a new buffer for the subscriber
+        // Copy active area to a new buffer (top activeHeight lines, crop metadata)
         int activeBytes = _frameWidth * _activeHeight;
         var frame = new byte[activeBytes];
-        Buffer.BlockCopy(_pixelBuf, 0, frame, 0, activeBytes);
+        Buffer.BlockCopy(_frameBuf, 0, frame, 0, activeBytes);
 
         var meta = new LvdsFrameMeta
         {
             FrameId = _frameCount,
             Width = _frameWidth,
             Height = _activeHeight,
+            LinesReceived = _linesReceived,
+            LinesExpected = _frameHeightLvds,
             SyncLosses = _syncLossCount,
+            CrcErrors = _crcErrorCount,
+            ParityErrors = _parityErrorCount,
             TotalBytes = _totalBytesReceived,
-            HeaderByte2 = _headerBuf[1],
-            HeaderByte3 = _headerBuf.Length > 2 ? _headerBuf[2] : (byte)0,
         };
 
-        _state = State.WaitSync0;
-        _headerPos = 0;
-        _pixelPos = 0;
+        // Reset line tracking for next frame
+        _linesReceived = 0;
+        Array.Clear(_lineReceived);
+        // Keep _frameBuf content — new lines will overwrite
 
         OnFrameReady?.Invoke(frame, meta);
     }
@@ -228,8 +258,12 @@ public sealed record LvdsFrameMeta
     public uint FrameId { get; init; }
     public int Width { get; init; }
     public int Height { get; init; }
+    /// <summary>Lines actually received before this frame was emitted.</summary>
+    public int LinesReceived { get; init; }
+    /// <summary>Expected total lines per frame (H_LVDS).</summary>
+    public int LinesExpected { get; init; }
     public int SyncLosses { get; init; }
+    public int CrcErrors { get; init; }
+    public int ParityErrors { get; init; }
     public long TotalBytes { get; init; }
-    public byte HeaderByte2 { get; init; }
-    public byte HeaderByte3 { get; init; }
 }
