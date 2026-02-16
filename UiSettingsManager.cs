@@ -103,7 +103,8 @@ public sealed class UiSettingsManager
         int vlanId = 70,
         int vlanPriority = 5,
         string avtpEtherType = "0x22F0",
-        string streamIdLastByte = "0x50")
+        string streamIdLastByte = "0x50",
+        string? lvdsPortHint = null)
     {
         return new AppSettings
         {
@@ -123,7 +124,8 @@ public sealed class UiSettingsManager
             VlanId = vlanId,
             VlanPriority = vlanPriority,
             AvtpEtherType = avtpEtherType,
-            StreamIdLastByte = streamIdLastByte
+            StreamIdLastByte = streamIdLastByte,
+            LvdsPortHint = lvdsPortHint
         };
     }
 }

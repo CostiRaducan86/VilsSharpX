@@ -136,6 +136,10 @@ namespace VilsSharpX
         // Live NIC selector
         private readonly LiveNicSelector _nicSelector = new();
 
+        // LVDS serial capture (Pico 2 board)
+        private LvdsLiveManager _lvdsManager = null!;
+        private string? _lvdsPortHint;
+
         private Frame? _latestA;
         private Frame? _latestB;
         private Frame? _latestD;
@@ -252,6 +256,7 @@ namespace VilsSharpX
             _pixelInspector = new PixelInspector(w, h);
             _settingsManager = new UiSettingsManager(w, h);
             _txManager = new AvtpTransmitManager(w, h, AppendDiagLog);
+            _lvdsManager = new LvdsLiveManager(_currentDeviceType, LiveSignalLostTimeoutSec, AppendDiagLog);
         }
 
         /// <summary>
@@ -264,6 +269,7 @@ namespace VilsSharpX
             // This prevents stale resources (pcap devices, sockets, files) from causing issues.
             try { _txManager?.Dispose(); } catch { /* ignore */ }
             try { _liveCapture?.Dispose(); } catch { /* ignore */ }
+            try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
             try { _aviPlayer?.Dispose(); } catch { /* ignore */ }
 
             InitializeResolutionDependentObjects();
@@ -272,6 +278,13 @@ namespace VilsSharpX
             // Re-subscribe to LiveCaptureManager events (since we recreated the instance)
             if (_liveCapture != null)
                 _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
+
+            // Re-subscribe to LVDS manager events
+            if (_lvdsManager != null)
+                _lvdsManager.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+
+            // Update LVDS protocol info label
+            UpdateLvdsProtocolLabel();
 
             // Rebind bitmaps to UI
             if (ImgA != null) ImgA.Source = _wbA;
@@ -705,6 +718,13 @@ namespace VilsSharpX
             // Startup should show "Signal not available".
             ApplyNoSignalUiState(noSignal: true);
 
+            // Wire up LVDS manager frame ready event
+            _lvdsManager.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+
+            // Populate COM port list and LVDS protocol info
+            RefreshLvdsPortList();
+            UpdateLvdsProtocolLabel();
+
             // Default button states: Load Files + Start enabled; others disabled
             ApplyButtonStates(false);
         }
@@ -817,8 +837,15 @@ namespace VilsSharpX
                 if (TxtAvtpEtherType != null) TxtAvtpEtherType.Text = _avtpEtherType;
                 if (TxtStreamIdLastByte != null) TxtStreamIdLastByte.Text = _streamIdLastByte;
 
+                // LVDS port hint
+                _lvdsPortHint = s.LvdsPortHint;
+
                 RefreshLiveNicList();
                 UpdateLiveUiEnabledState();
+
+                // Refresh LVDS COM port list (after loading settings)
+                RefreshLvdsPortList();
+                UpdateLvdsProtocolLabel();
 
                 RenderAll();
 
@@ -841,7 +868,8 @@ namespace VilsSharpX
                 Volatile.Read(ref _forcedDeadPixelId), _darkPixelCompensationEnabled,
                 _avtpLiveEnabled, _avtpLiveDeviceHint, (int)_modeOfOperation,
                 _srcMac, _dstMac, (int)_currentDeviceType,
-                _ecuVariant, _vlanId, _vlanPriority, _avtpEtherType, _streamIdLastByte);
+                _ecuVariant, _vlanId, _vlanPriority, _avtpEtherType, _streamIdLastByte,
+                _lvdsPortHint);
             _settingsManager.TrySave(s);
         }
 
@@ -938,6 +966,109 @@ namespace VilsSharpX
             _nicSelector.UpdateLiveUiEnabledState(CmbLiveNic, _modeOfOperation == ModeOfOperation.AvtpLiveMonitor);
 
         private void BtnRefreshNics_Click(object sender, RoutedEventArgs e) => RefreshLiveNicList();
+
+        // ── LVDS Serial Capture (Pane B) ────────────────────────────────────
+
+        private void RefreshLvdsPortList()
+        {
+            if (CmbLvdsPort == null) return;
+
+            CmbLvdsPort.Items.Clear();
+            CmbLvdsPort.Items.Add("<None>");
+
+            foreach (var port in LvdsLiveManager.ListPorts())
+                CmbLvdsPort.Items.Add(port);
+
+            // Try to restore last selection
+            int idx = 0;
+            if (!string.IsNullOrWhiteSpace(_lvdsPortHint))
+            {
+                for (int i = 1; i < CmbLvdsPort.Items.Count; i++)
+                {
+                    if (string.Equals(CmbLvdsPort.Items[i] as string, _lvdsPortHint, StringComparison.OrdinalIgnoreCase))
+                    {
+                        idx = i;
+                        break;
+                    }
+                }
+            }
+            CmbLvdsPort.SelectedIndex = idx;
+        }
+
+        private void BtnRefreshLvdsPorts_Click(object sender, RoutedEventArgs e) => RefreshLvdsPortList();
+
+        private void CmbLvdsPort_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading) return;
+            var sel = CmbLvdsPort?.SelectedItem as string;
+            _lvdsPortHint = (sel != null && sel != "<None>") ? sel : null;
+            SaveUiSettings();
+        }
+
+        private void BtnLvdsStart_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(_lvdsPortHint))
+            {
+                LblLvdsStatus.Text = "Select a COM port first.";
+                return;
+            }
+
+            try
+            {
+                _lvdsManager.StartCapture(_lvdsPortHint);
+                BtnLvdsStart.IsEnabled = false;
+                BtnLvdsStop.IsEnabled = true;
+                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint}...";
+                UpdateLvdsProtocolLabel();
+            }
+            catch (Exception ex)
+            {
+                LblLvdsStatus.Text = $"Error: {ex.Message}";
+            }
+        }
+
+        private void BtnLvdsStop_Click(object sender, RoutedEventArgs e)
+        {
+            _lvdsManager.StopCapture();
+            BtnLvdsStart.IsEnabled = true;
+            BtnLvdsStop.IsEnabled = false;
+            LblLvdsStatus.Text = "Stopped.";
+            LblLvdsFrameCount.Text = "Frames: 0";
+            LblLvdsBytesReceived.Text = "Bytes: 0";
+            LblLvdsSyncLoss.Text = "Sync losses: 0";
+            LblLvdsFps.Text = "FPS: --";
+        }
+
+        private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
+        {
+            // Update LVDS stats labels
+            LblLvdsFrameCount.Text = $"Frames: {meta.FrameId}";
+            LblLvdsBytesReceived.Text = $"Bytes: {meta.TotalBytes:N0}";
+            LblLvdsSyncLoss.Text = $"Sync losses: {meta.SyncLosses}";
+            LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
+
+            // Store frame into _latestB for render
+            if (_playback.IsRunning)
+            {
+                lock (_frameLock)
+                {
+                    _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
+                }
+            }
+        }
+
+        private void UpdateLvdsProtocolLabel()
+        {
+            if (LblLvdsProtocol == null) return;
+            var cfg = LvdsProtocol.GetUartConfig(_currentDeviceType);
+            string parityStr = cfg.Parity == System.IO.Ports.Parity.None ? "N" :
+                               cfg.Parity == System.IO.Ports.Parity.Odd ? "O" : "E";
+            LblLvdsProtocol.Text = $"Protocol: {_currentDeviceType.GetDisplayName()}\n" +
+                                   $"Baud: {cfg.BaudRate:N0} bps | {cfg.DataBits}{parityStr}1 | LSB-first\n" +
+                                   $"Frame: {cfg.FrameWidth}×{cfg.FrameHeight} → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
+        }
+
+        // ── End LVDS ────────────────────────────────────────────────────────
 
         private void CmbLiveNic_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
@@ -1063,6 +1194,7 @@ namespace VilsSharpX
             SaveUiSettings();
             if (_recordingManager.IsRecording) StopRecording();
             StopAll();
+            try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
         }
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
@@ -1967,10 +2099,22 @@ namespace VilsSharpX
                 }
             }
 
-            // In AVTP Live mode, B is derived from A using the UI delta, D is derived from (B-A).
+            // In AVTP Live mode:
+            //   - If LVDS capture is active and has a frame, use the real LVDS data for B
+            //   - Otherwise, derive B from A using the UI delta (mock LVDS)
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
-                b = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
+                if (_lvdsManager.IsCapturing && _lvdsManager.HasFrame)
+                {
+                    // Real LVDS frame for Pane B
+                    var lvdsData = ImageUtils.Copy(_lvdsManager.LvdsFrame);
+                    b = new Frame(_currentWidth, _currentHeight, lvdsData, _lvdsManager.LastFrameUtc);
+                }
+                else
+                {
+                    // Fallback: mock LVDS (A + delta)
+                    b = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
+                }
                 d = AbsDiff(a, b);
             }
 

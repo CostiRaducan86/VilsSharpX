@@ -364,34 +364,53 @@
             </Grid>
         </Border>
 
-        <!-- Right side: CAN UART Communication (aligned top with A, bottom with B/D) -->
+        <!-- Right side: LVDS Capture (Pico 2 / Serial) -->
         <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" BorderBrush="#ABADB3" BorderThickness="1" CornerRadius="8" Margin="4" Padding="6" Background="#F0F0F0">
-            <GroupBox Header="CAN UART Communication" Padding="8">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+            <GroupBox Header="LVDS Capture (Pane B)" Padding="8">
+                <StackPanel Orientation="Vertical">
+                    <!-- COM Port selection -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                        <TextBlock Text="COM Port:" VerticalAlignment="Center" Width="70" Margin="0,0,4,0"/>
+                        <ComboBox x:Name="CmbLvdsPort" Width="110" SelectionChanged="CmbLvdsPort_SelectionChanged" Margin="0,0,4,0"/>
+                        <Button Content="Refresh" Click="BtnRefreshLvdsPorts_Click" Padding="6,4" Width="56"/>
+                    </StackPanel>
 
-                    <TextBlock Text="Visual area prepared for CAN/UART monitoring. Functional implementation will be added later."
-                               TextWrapping="Wrap"
-                               Foreground="DimGray"
-                               Margin="0,0,0,8"/>
+                    <!-- LVDS Capture Start/Stop -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
+                        <Button x:Name="BtnLvdsStart" Content="Start LVDS" Click="BtnLvdsStart_Click" Padding="8,4" Width="90" Margin="0,0,8,0"/>
+                        <Button x:Name="BtnLvdsStop" Content="Stop LVDS" Click="BtnLvdsStop_Click" Padding="8,4" Width="90" IsEnabled="False"/>
+                    </StackPanel>
 
-                    <ListView Grid.Row="1" IsHitTestVisible="False" Focusable="False">
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="Time" Width="72" DisplayMemberBinding="{Binding Time}"/>
-                                <GridViewColumn Header="Nr" Width="34" DisplayMemberBinding="{Binding Nr}"/>
-                                <GridViewColumn Header="Name" Width="70" DisplayMemberBinding="{Binding Name}"/>
-                                <GridViewColumn Header="Address" Width="70" DisplayMemberBinding="{Binding Address}"/>
-                                <GridViewColumn Header="R/W" Width="42" DisplayMemberBinding="{Binding RW}"/>
-                                <GridViewColumn Header="Value" Width="96" DisplayMemberBinding="{Binding Value}"/>
-                            </GridView>
-                        </ListView.View>
-                        <ListViewItem Content="(placeholder)"/>
-                    </ListView>
-                </Grid>
+                    <!-- Separator -->
+                    <Rectangle Height="1" Fill="Gray" Margin="0,4,0,8" HorizontalAlignment="Stretch"/>
+
+                    <!-- LVDS Status -->
+                    <TextBlock Text="LVDS Info" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="LblLvdsStatus" TextWrapping="Wrap" Foreground="DimGray"
+                               Text="Not connected. Select a COM port and click Start LVDS."/>
+
+                    <!-- LVDS Protocol details (auto-detected from LSM device type) -->
+                    <TextBlock x:Name="LblLvdsProtocol" TextWrapping="Wrap" Foreground="DimGray" Margin="0,8,0,0"
+                               Text=""/>
+
+                    <!-- Separator -->
+                    <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
+
+                    <!-- Frame statistics -->
+                    <TextBlock Text="Frame Statistics" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="LblLvdsFrameCount" Text="Frames: 0" Foreground="DimGray"/>
+                    <TextBlock x:Name="LblLvdsBytesReceived" Text="Bytes: 0" Foreground="DimGray"/>
+                    <TextBlock x:Name="LblLvdsSyncLoss" Text="Sync losses: 0" Foreground="DimGray"/>
+                    <TextBlock x:Name="LblLvdsFps" Text="FPS: --" Foreground="DimGray"/>
+
+                    <!-- Separator -->
+                    <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
+
+                    <!-- CAN/UART placeholder (future) -->
+                    <TextBlock Text="CAN/UART Monitor" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock Text="CAN/UART monitoring planned for future implementation."
+                               TextWrapping="Wrap" Foreground="LightGray" FontStyle="Italic"/>
+                </StackPanel>
             </GroupBox>
         </Border>
 

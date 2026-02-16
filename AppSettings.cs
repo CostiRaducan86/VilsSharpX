@@ -6,7 +6,7 @@ namespace VilsSharpX;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsVersion = 7;
+    public const int CurrentSettingsVersion = 8;
 
     public int SettingsVersion { get; set; } = CurrentSettingsVersion;
 
@@ -42,6 +42,9 @@ public sealed class AppSettings
     public int VlanPriority { get; set; } = 5;
     public string AvtpEtherType { get; set; } = "0x22F0";
     public string StreamIdLastByte { get; set; } = "0x50";
+
+    // LVDS serial capture (Pico 2 board via USB CDC COM port)
+    public string? LvdsPortHint { get; set; } = null;
 }
 
 public static class AppSettingsStore
@@ -114,6 +117,14 @@ public static class AppSettingsStore
                 settings.AvtpEtherType = "0x22F0";
                 settings.StreamIdLastByte = "0x50";
                 settings.SettingsVersion = 7;
+                migrated = true;
+            }
+
+            if (settings.SettingsVersion < 8)
+            {
+                // Migration: add LVDS serial capture port hint.
+                settings.LvdsPortHint = null;
+                settings.SettingsVersion = 8;
                 migrated = true;
             }
 
