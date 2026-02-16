@@ -139,6 +139,7 @@ namespace VilsSharpX
         // LVDS serial capture (Pico 2 board)
         private LvdsLiveManager _lvdsManager = null!;
         private string? _lvdsPortHint;
+        private LvdsSimulatedSource? _lvdsSimSource;
 
         private Frame? _latestA;
         private Frame? _latestB;
@@ -269,8 +270,12 @@ namespace VilsSharpX
             // This prevents stale resources (pcap devices, sockets, files) from causing issues.
             try { _txManager?.Dispose(); } catch { /* ignore */ }
             try { _liveCapture?.Dispose(); } catch { /* ignore */ }
+            try { _lvdsSimSource?.Dispose(); _lvdsSimSource = null; } catch { /* ignore */ }
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
             try { _aviPlayer?.Dispose(); } catch { /* ignore */ }
+
+            // Reset LVDS test button state
+            if (BtnLvdsTest != null) BtnLvdsTest.Content = "Test";
 
             InitializeResolutionDependentObjects();
             InitializeDefaultPatterns();
@@ -725,6 +730,9 @@ namespace VilsSharpX
             RefreshLvdsPortList();
             UpdateLvdsProtocolLabel();
 
+            // Auto-run CRC self-test at startup and log results
+            RunStartupCrcSelfTest();
+
             // Default button states: Load Files + Start enabled; others disabled
             ApplyButtonStates(false);
         }
@@ -1068,6 +1076,88 @@ namespace VilsSharpX
                                    $"Baud: {cfg.BaudRate:N0} bps | {cfg.DataBits}{parityStr}1 | LSB-first\n" +
                                    $"Line: [0x5D][row][{cfg.FrameWidth}px][CRC{cfg.CrcLen*8}] = {cfg.LinePacketLen} B\n" +
                                    $"Frame: {cfg.FrameHeight} lines → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
+        }
+
+        // ── LVDS Test (simulated source) ───────────────────────────────
+
+        private void BtnLvdsTest_Click(object sender, RoutedEventArgs e)
+        {
+            if (_lvdsSimSource != null && _lvdsSimSource.IsRunning)
+            {
+                // Stop simulated source
+                StopLvdsSimulation();
+                return;
+            }
+
+            // Stop real capture if running
+            if (_lvdsManager.IsCapturing)
+            {
+                _lvdsManager.StopCapture();
+                BtnLvdsStart.IsEnabled = true;
+                BtnLvdsStop.IsEnabled = false;
+            }
+
+            // Start simulated source
+            _lvdsSimSource = new LvdsSimulatedSource(_currentDeviceType, targetFps: 30, AppendDiagLog);
+            _lvdsSimSource.OnDataGenerated += OnSimulatedLvdsData;
+
+            // Reset reassembler and manager state, then start sim
+            _lvdsManager.ReconfigureForDevice(_currentDeviceType);
+            _lvdsManager.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+            _lvdsSimSource.Start();
+
+            BtnLvdsTest.Content = "Stop Test";
+            BtnLvdsStart.IsEnabled = false;
+            LblLvdsStatus.Text = "Simulated LVDS data — validating pipeline (no hardware)...";
+            UpdateLvdsProtocolLabel();
+            AppendDiagLog("[lvds-sim] test mode started for " + _currentDeviceType.GetDisplayName());
+        }
+
+        private void OnSimulatedLvdsData(byte[] buffer, int count)
+        {
+            // Feed simulated data directly into the manager's reassembler
+            // We need to go through the same pipeline as real serial data
+            _lvdsManager.PushSimulatedData(buffer, count);
+        }
+
+        private void StopLvdsSimulation()
+        {
+            _lvdsSimSource?.Stop();
+            _lvdsSimSource?.Dispose();
+            _lvdsSimSource = null;
+
+            BtnLvdsTest.Content = "Test";
+            BtnLvdsStart.IsEnabled = true;
+            LblLvdsStatus.Text = "Simulation stopped.";
+            AppendDiagLog("[lvds-sim] test mode stopped");
+        }
+
+        // ── CRC Self-Test ──────────────────────────────────────────────
+
+        private void BtnCrcSelfTest_Click(object sender, RoutedEventArgs e)
+        {
+            var (allPassed, report) = LvdsCrc.RunSelfTestFormatted();
+            LblCrcSelfTest.Text = report;
+            LblCrcSelfTest.Foreground = allPassed
+                ? System.Windows.Media.Brushes.DarkGreen
+                : System.Windows.Media.Brushes.Red;
+
+            AppendDiagLog(report);
+        }
+
+        private void RunStartupCrcSelfTest()
+        {
+            var (allPassed, report) = LvdsCrc.RunSelfTestFormatted();
+            AppendDiagLog(report);
+            if (LblCrcSelfTest != null)
+            {
+                LblCrcSelfTest.Text = allPassed
+                    ? "CRC self-test: ALL PASSED"
+                    : report;
+                LblCrcSelfTest.Foreground = allPassed
+                    ? System.Windows.Media.Brushes.DarkGreen
+                    : System.Windows.Media.Brushes.Red;
+            }
         }
 
         // ── End LVDS ────────────────────────────────────────────────────────

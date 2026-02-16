@@ -57,6 +57,11 @@ public sealed class LvdsFrameReassembler
     private int _parityErrorCount;
     private long _totalBytesReceived;
 
+    // Diagnostic logging — logs first N lines for debug
+    private Action<string>? _log;
+    private int _diagLogLinesRemaining;
+    private const int DiagLogLinesMax = 10; // log first N lines of capture session
+
     // ── Events ──────────────────────────────────────────────────────────
     /// <summary>
     /// Fired when a complete frame is reassembled.
@@ -67,13 +72,16 @@ public sealed class LvdsFrameReassembler
     /// <summary>
     /// Creates a new LVDS frame reassembler for line-based protocol parsing.
     /// </summary>
-    public LvdsFrameReassembler(int width, int lvdsHeight, int activeHeight, int crcLen, bool isNichia)
+    public LvdsFrameReassembler(int width, int lvdsHeight, int activeHeight, int crcLen, bool isNichia,
+                                 Action<string>? log = null)
     {
         _frameWidth = width;
         _frameHeightLvds = lvdsHeight;
         _activeHeight = activeHeight;
         _crcLen = crcLen;
         _isNichia = isNichia;
+        _log = log;
+        _diagLogLinesRemaining = DiagLogLinesMax;
 
         _linePixels = new byte[width];
         _crcBuf = new byte[Math.Max(crcLen, 4)]; // at least 4 for CRC32
@@ -164,6 +172,7 @@ public sealed class LvdsFrameReassembler
         _parityErrorCount = 0;
         _totalBytesReceived = 0;
         _frameCount = 0;
+        _diagLogLinesRemaining = DiagLogLinesMax;
         Array.Clear(_frameBuf);
         Array.Clear(_lineReceived);
     }
@@ -196,17 +205,51 @@ public sealed class LvdsFrameReassembler
         // For now, we accept all lines regardless of CRC.
 
         // CRC verification (diagnostic — count errors but don't discard data)
+        bool crcOk = true;
         if (_isNichia && _crcLen >= 2)
         {
             if (!LvdsCrc.VerifyNichiaCrc(_linePixels, 0, _frameWidth,
                                           _crcBuf[0], _crcBuf[1]))
+            {
                 _crcErrorCount++;
+                crcOk = false;
+                // Log first 5 CRC mismatches with detail
+                if (_crcErrorCount <= 5 && _log != null)
+                {
+                    ushort computed = LvdsCrc.ComputeCrc16(_linePixels, 0, _frameWidth);
+                    ushort received = (ushort)((_crcBuf[0] << 8) | _crcBuf[1]);
+                    _log($"[lvds-crc] CRC16 MISMATCH row={row}: computed=0x{computed:X4} received=0x{received:X4} " +
+                         $"px[0..3]=[{_linePixels[0]:X2} {_linePixels[1]:X2} {_linePixels[2]:X2} {_linePixels[3]:X2}]");
+                }
+            }
         }
         else if (!_isNichia && _crcLen >= 4)
         {
             if (!LvdsCrc.VerifyOsramCrc(_linePixels, 0, _frameWidth,
                                          _crcBuf[0], _crcBuf[1], _crcBuf[2], _crcBuf[3]))
+            {
                 _crcErrorCount++;
+                crcOk = false;
+                if (_crcErrorCount <= 5 && _log != null)
+                {
+                    uint computed = LvdsCrc.ComputeCrc32(_linePixels, 0, _frameWidth);
+                    uint received = (uint)(_crcBuf[0] | (_crcBuf[1] << 8) | (_crcBuf[2] << 16) | (_crcBuf[3] << 24));
+                    _log($"[lvds-crc] CRC32 MISMATCH row={row}: computed=0x{computed:X8} received=0x{received:X8} " +
+                         $"px[0..3]=[{_linePixels[0]:X2} {_linePixels[1]:X2} {_linePixels[2]:X2} {_linePixels[3]:X2}]");
+                }
+            }
+        }
+
+        // ── Diagnostic hex log (first N lines of capture session) ───
+        if (_diagLogLinesRemaining > 0 && _log != null)
+        {
+            _diagLogLinesRemaining--;
+            string crcHex = _isNichia
+                ? $"{_crcBuf[0]:X2} {_crcBuf[1]:X2}"
+                : $"{_crcBuf[0]:X2} {_crcBuf[1]:X2} {_crcBuf[2]:X2} {_crcBuf[3]:X2}";
+            _log($"[lvds-diag] line row={row} rowByte=0x{_currentRowByte:X2} " +
+                 $"px[0..5]=[{_linePixels[0]:X2} {_linePixels[1]:X2} {_linePixels[2]:X2} {_linePixels[3]:X2} {_linePixels[4]:X2} {_linePixels[5]:X2}] " +
+                 $"CRC=[{crcHex}] {(crcOk ? "OK" : "FAIL")}");
         }
 
         // ── Frame boundary detection ────────────────────────────────────

@@ -87,15 +87,15 @@ public sealed class LvdsLiveManager : IDisposable
         _fpsAlpha = fpsAlpha;
 
         _lvdsFrame = new byte[_config.ActiveBytes];
-        _reassembler = CreateReassembler(_config);
+        _reassembler = CreateReassembler(_config, _log);
         _reassembler.OnFrameReady += OnReassembledFrame;
     }
 
-    private static LvdsFrameReassembler CreateReassembler(LvdsUartConfig config)
+    private static LvdsFrameReassembler CreateReassembler(LvdsUartConfig config, Action<string>? log = null)
     {
         return new LvdsFrameReassembler(
             config.FrameWidth, config.FrameHeight, config.ActiveHeight,
-            config.CrcLen, config.IsNichia);
+            config.CrcLen, config.IsNichia, log);
     }
 
     // ── Public API ──────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ public sealed class LvdsLiveManager : IDisposable
 
             // Rebuild reassembler and frame buffer for new dimensions
             _reassembler.OnFrameReady -= OnReassembledFrame;
-            _reassembler = CreateReassembler(_config);
+            _reassembler = CreateReassembler(_config, _log);
             _reassembler.OnFrameReady += OnReassembledFrame;
 
             _lvdsFrame = new byte[_config.ActiveBytes];
@@ -189,6 +189,16 @@ public sealed class LvdsLiveManager : IDisposable
         return _hasFrame
             && _lastFrameUtc != DateTime.MinValue
             && (DateTime.UtcNow - _lastFrameUtc) > _signalLostTimeout;
+    }
+
+    /// <summary>
+    /// Push data from a simulated source into the reassembler.
+    /// Allows pipeline testing without a real serial port.
+    /// </summary>
+    public void PushSimulatedData(byte[] data, int count)
+    {
+        Interlocked.Add(ref _bytesReceived, count);
+        _reassembler.Push(data, count);
     }
 
     /// <summary>

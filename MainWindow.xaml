@@ -378,7 +378,9 @@
                     <!-- LVDS Capture Start/Stop -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
                         <Button x:Name="BtnLvdsStart" Content="Start LVDS" Click="BtnLvdsStart_Click" Padding="8,4" Width="90" Margin="0,0,8,0"/>
-                        <Button x:Name="BtnLvdsStop" Content="Stop LVDS" Click="BtnLvdsStop_Click" Padding="8,4" Width="90" IsEnabled="False"/>
+                        <Button x:Name="BtnLvdsStop" Content="Stop LVDS" Click="BtnLvdsStop_Click" Padding="8,4" Width="90" IsEnabled="False" Margin="0,0,8,0"/>
+                        <Button x:Name="BtnLvdsTest" Content="Test" Click="BtnLvdsTest_Click" Padding="8,4" Width="56"
+                                ToolTip="Run simulated LVDS data (no hardware needed) to validate the pipeline."/>
                     </StackPanel>
 
                     <!-- Separator -->
@@ -402,6 +404,18 @@
                     <TextBlock x:Name="LblLvdsBytesReceived" Text="Bytes: 0" Foreground="DimGray"/>
                     <TextBlock x:Name="LblLvdsSyncLoss" Text="Sync losses: 0" Foreground="DimGray"/>
                     <TextBlock x:Name="LblLvdsFps" Text="FPS: --" Foreground="DimGray"/>
+
+                    <!-- Separator -->
+                    <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
+
+                    <!-- Diagnostics -->
+                    <TextBlock Text="Diagnostics" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <Button x:Name="BtnCrcSelfTest" Content="CRC Self-Test" Click="BtnCrcSelfTest_Click"
+                            Padding="8,4" Width="110" HorizontalAlignment="Left" Margin="0,0,0,4"
+                            ToolTip="Validate CRC-16 and CRC-32 algorithms against known test vectors."/>
+                    <TextBlock x:Name="LblCrcSelfTest" TextWrapping="Wrap" Foreground="DimGray"
+                               FontFamily="Consolas" FontSize="10.5"
+                               Text="Click CRC Self-Test to validate algorithms."/>
 
                     <!-- Separator -->
                     <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
