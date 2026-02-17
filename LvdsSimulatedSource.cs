@@ -5,12 +5,14 @@ using System.Threading.Tasks;
 namespace VilsSharpX;
 
 /// <summary>
-/// Generates synthetic LVDS line packets and feeds them into an
-/// <see cref="LvdsFrameReassembler"/> for pipeline testing without hardware.
+/// Generates synthetic LVDS frames and feeds them as "cooked frame" packets
+/// into a <see cref="LvdsCookedFrameReceiver"/> for pipeline testing without hardware.
 ///
 /// Produces frames with a moving gradient pattern so that visual correctness
-/// is easily verified in Pane B. Each line packet is correctly formatted:
-///   [0x5D] [row_byte] [W pixels] [CRC]
+/// is easily verified in Pane B. Each frame is emitted as a cooked packet:
+///   [0xFE][0xED][frame_id:2B LE][width:2B LE][height:2B LE][pixels:W×H]
+///
+/// This matches the format sent by the Pico 2 frame-aware firmware.
 ///
 /// Usage:
 ///   1. Create with desired device type and target FPS.
@@ -21,7 +23,6 @@ namespace VilsSharpX;
 public sealed class LvdsSimulatedSource : IDisposable
 {
     private readonly LvdsUartConfig _config;
-    private readonly bool _isNichia;
     private readonly double _targetFps;
     private readonly Action<string>? _log;
 
@@ -44,7 +45,6 @@ public sealed class LvdsSimulatedSource : IDisposable
     public LvdsSimulatedSource(LsmDeviceType deviceType, double targetFps = 30, Action<string>? log = null)
     {
         _config = LvdsProtocol.GetUartConfig(deviceType);
-        _isNichia = _config.IsNichia;
         _targetFps = targetFps > 0 ? targetFps : 30;
         _log = log;
     }
@@ -83,12 +83,11 @@ public sealed class LvdsSimulatedSource : IDisposable
     private void GenerateLoop(CancellationToken ct)
     {
         int w = _config.FrameWidth;
-        int h = _config.FrameHeight;      // full LVDS height (incl. metadata)
-        int linePacketLen = _config.LinePacketLen;
-        int crcLen = _config.CrcLen;
+        int activeH = _config.ActiveHeight; // active rows only (firmware crops metadata)
 
-        // Pre-allocate packet buffer for one line
-        var linePacket = new byte[linePacketLen];
+        // Cooked frame packet: 8-byte header + w*activeH pixel bytes
+        int packetLen = 8 + w * activeH;
+        var packet = new byte[packetLen];
 
         // Frame interval
         int frameIntervalMs = (int)(1000.0 / _targetFps);
@@ -98,49 +97,31 @@ public sealed class LvdsSimulatedSource : IDisposable
             var frameStart = DateTime.UtcNow;
             _frameCounter++;
 
-            // Generate each line of the frame
-            for (int row = 0; row < h && !ct.IsCancellationRequested; row++)
+            // ── Build cooked frame header ─────────────────────────
+            packet[0] = 0xFE;  // magic
+            packet[1] = 0xED;
+            packet[2] = (byte)(_frameCounter & 0xFF);
+            packet[3] = (byte)((_frameCounter >> 8) & 0xFF);
+            packet[4] = (byte)(w & 0xFF);
+            packet[5] = (byte)((w >> 8) & 0xFF);
+            packet[6] = (byte)(activeH & 0xFF);
+            packet[7] = (byte)((activeH >> 8) & 0xFF);
+
+            // ── Build pixel data — moving gradient pattern ────────
+            int pixOff = 8;
+            for (int row = 0; row < activeH; row++)
             {
-                // ── Build line packet ─────────────────────────────────
-                int pos = 0;
-
-                // Sync byte
-                linePacket[pos++] = LvdsProtocol.SyncByte;
-
-                // Row byte
-                linePacket[pos++] = _isNichia
-                    ? LvdsProtocol.MakeNichiaRowByte(row)
-                    : (byte)row;
-
-                // Pixel data — moving gradient pattern
-                // Gradient shifts by frame counter to create animation
                 byte rowBase = (byte)((_frameCounter * 3 + row * 4) & 0xFF);
                 for (int col = 0; col < w; col++)
                 {
-                    linePacket[pos++] = (byte)((rowBase + col) & 0xFF);
+                    packet[pixOff++] = (byte)((rowBase + col) & 0xFF);
                 }
-
-                // CRC over pixel data only (bytes 2..2+W-1)
-                if (_isNichia)
-                {
-                    ushort crc = LvdsCrc.ComputeCrc16(linePacket, LvdsProtocol.LineHeaderLen, w);
-                    linePacket[pos++] = (byte)(crc >> 8);   // big-endian
-                    linePacket[pos++] = (byte)(crc & 0xFF);
-                }
-                else
-                {
-                    uint crc = LvdsCrc.ComputeCrc32(linePacket, LvdsProtocol.LineHeaderLen, w);
-                    linePacket[pos++] = (byte)(crc & 0xFF);          // little-endian
-                    linePacket[pos++] = (byte)((crc >> 8) & 0xFF);
-                    linePacket[pos++] = (byte)((crc >> 16) & 0xFF);
-                    linePacket[pos++] = (byte)((crc >> 24) & 0xFF);
-                }
-
-                // Emit line packet (clone buffer since subscriber may hold reference)
-                var clone = new byte[linePacketLen];
-                Buffer.BlockCopy(linePacket, 0, clone, 0, linePacketLen);
-                OnDataGenerated?.Invoke(clone, linePacketLen);
             }
+
+            // Emit complete cooked frame packet
+            var clone = new byte[packetLen];
+            Buffer.BlockCopy(packet, 0, clone, 0, packetLen);
+            OnDataGenerated?.Invoke(clone, packetLen);
 
             // Wait for remainder of frame interval
             var elapsed = DateTime.UtcNow - frameStart;

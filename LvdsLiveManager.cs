@@ -10,12 +10,16 @@ namespace VilsSharpX;
 /// Architecture:
 ///   Pico 2 (LogicAnalyzer board)
 ///     → captures TTL UART signal via PIO (post-LVDS receiver)
-///     → forwards raw bytes over USB CDC (virtual COM port)
+///     → firmware parses LVDS lines, assembles complete frames on-chip
+///     → sends "cooked" frame packets over USB CDC:
+///       [0xFE][0xED][frame_id:2B][width:2B][height:2B][pixels:W×H]
 ///     → LvdsUartCapture reads COM port
-///     → LvdsFrameReassembler parses per-line packets
-///       [0x5D][row_byte][W pixels][CRC]
-///     → OnFrameReady event fires with cropped active-area frame
+///     → LvdsCookedFrameReceiver parses cooked frame packets
+///     → OnFrameReady event fires with complete frame
 ///     → MainWindow renders on Pane B
+///
+/// The firmware handles frame skipping to match USB bandwidth,
+/// so every frame received by the host is complete and CRC-verified.
 ///
 /// Analogous to <see cref="LiveCaptureManager"/> for AVTP Ethernet.
 /// </summary>
@@ -27,8 +31,8 @@ public sealed class LvdsLiveManager : IDisposable
     // Serial capture
     private LvdsUartCapture? _capture;
 
-    // Frame reassembler
-    private LvdsFrameReassembler _reassembler;
+    // Cooked frame receiver (firmware sends complete frame packets)
+    private LvdsCookedFrameReceiver _receiver;
 
     // Current configuration
     private LvdsUartConfig _config;
@@ -39,11 +43,17 @@ public sealed class LvdsLiveManager : IDisposable
     private volatile bool _hasFrame;
     private DateTime _lastFrameUtc = DateTime.MinValue;
 
+
+
     // Signal loss detection
     private readonly TimeSpan _signalLostTimeout;
 
     // Diagnostics
     private long _bytesReceived;
+
+    // Firmware status interception (for querying during active capture)
+    private volatile bool _interceptStatus;
+    private Action<string>? _statusCallback;
 
     // FPS estimation (EMA-based, matching app convention)
     private readonly double _fpsWindowSec;
@@ -74,6 +84,37 @@ public sealed class LvdsLiveManager : IDisposable
     /// <summary>Current LVDS FPS estimate (EMA-smoothed).</summary>
     public double FpsEma => _fpsEma;
 
+    /// <summary>Total raw bytes received from the serial port (atomically read).</summary>
+    public long BytesReceived => Interlocked.Read(ref _bytesReceived);
+
+    /// <summary>
+    /// Send 'S' command to the Pico 2 firmware through the active capture connection
+    /// and intercept the status response from the data stream.
+    /// The firmware stops PIO, sends "MODE=...\n", then restarts capture.
+    /// </summary>
+    public void QueryFirmwareStatusDuringCapture(Action<string> onResponse)
+    {
+        if (_capture == null || !_capture.IsOpen)
+        {
+            onResponse("ERROR: no active capture");
+            return;
+        }
+        _statusCallback = onResponse;
+        _interceptStatus = true;
+        _capture.Send(new byte[] { (byte)'S' });
+        _log("[lvds] sent firmware status query 'S' over active capture");
+    }
+
+    /// <summary>
+    /// Snapshot of reassembler statistics for periodic UI refresh.
+    /// This allows the UI to show progress even before complete frames arrive.
+    /// </summary>
+    public (uint FrameCount, int SyncLosses, int CrcErrors, int ParityErrors, long TotalBytes) GetReassemblerStats()
+    {
+        var r = _receiver;
+        return (r.FrameCount, r.SyncLossCount, r.CrcErrorCount, r.ParityErrorCount, r.TotalBytesReceived);
+    }
+
     // ── Construction ────────────────────────────────────────────────────
 
     public LvdsLiveManager(LsmDeviceType deviceType, double signalLostTimeoutSec, Action<string> log,
@@ -87,15 +128,8 @@ public sealed class LvdsLiveManager : IDisposable
         _fpsAlpha = fpsAlpha;
 
         _lvdsFrame = new byte[_config.ActiveBytes];
-        _reassembler = CreateReassembler(_config, _log);
-        _reassembler.OnFrameReady += OnReassembledFrame;
-    }
-
-    private static LvdsFrameReassembler CreateReassembler(LvdsUartConfig config, Action<string>? log = null)
-    {
-        return new LvdsFrameReassembler(
-            config.FrameWidth, config.FrameHeight, config.ActiveHeight,
-            config.CrcLen, config.IsNichia, log);
+        _receiver = new LvdsCookedFrameReceiver();
+        _receiver.OnFrameReady += OnReceivedFrame;
     }
 
     // ── Public API ──────────────────────────────────────────────────────
@@ -111,10 +145,13 @@ public sealed class LvdsLiveManager : IDisposable
 
             try
             {
-                _reassembler.Reset();
+                _receiver.Dispose();
+                _receiver = new LvdsCookedFrameReceiver();
+                _receiver.OnFrameReady += OnReceivedFrame;
                 _hasFrame = false;
                 _lastFrameUtc = DateTime.MinValue;
                 _bytesReceived = 0;
+                _hexDumpDone = false;
                 _fpsEma = 0;
                 _fpsFrameCount = 0;
                 _fpsSw.Restart();
@@ -164,10 +201,11 @@ public sealed class LvdsLiveManager : IDisposable
             _deviceType = deviceType;
             _config = LvdsProtocol.GetUartConfig(deviceType);
 
-            // Rebuild reassembler and frame buffer for new dimensions
-            _reassembler.OnFrameReady -= OnReassembledFrame;
-            _reassembler = CreateReassembler(_config, _log);
-            _reassembler.OnFrameReady += OnReassembledFrame;
+            // Rebuild receiver and frame buffer for new dimensions
+            _receiver.OnFrameReady -= OnReceivedFrame;
+            _receiver.Dispose();
+            _receiver = new LvdsCookedFrameReceiver();
+            _receiver.OnFrameReady += OnReceivedFrame;
 
             _lvdsFrame = new byte[_config.ActiveBytes];
             _hasFrame = false;
@@ -198,7 +236,7 @@ public sealed class LvdsLiveManager : IDisposable
     public void PushSimulatedData(byte[] data, int count)
     {
         Interlocked.Add(ref _bytesReceived, count);
-        _reassembler.Push(data, count);
+        _receiver.Push(data, count);
     }
 
     /// <summary>
@@ -208,6 +246,7 @@ public sealed class LvdsLiveManager : IDisposable
     {
         _hasFrame = false;
         _lastFrameUtc = DateTime.MinValue;
+        Array.Clear(_lvdsFrame);
     }
 
     /// <summary>
@@ -215,7 +254,7 @@ public sealed class LvdsLiveManager : IDisposable
     /// </summary>
     public string GetDiagnostics()
     {
-        var r = _reassembler;
+        var r = _receiver;
         return $"LVDS: port={ActivePort ?? "none"}, frames={r.FrameCount}, " +
                $"syncLoss={r.SyncLossCount}, crcErr={r.CrcErrorCount}, " +
                $"parityErr={r.ParityErrorCount}, fps={_fpsEma:F1}, " +
@@ -266,13 +305,61 @@ public sealed class LvdsLiveManager : IDisposable
 
     // ── Callbacks ───────────────────────────────────────────────────────
 
+    /// <summary>Number of initial bytes to hex-dump when capture starts (for debugging).</summary>
+    private const int HexDumpBytes = 128;
+    private volatile bool _hexDumpDone;
+
     private void OnSerialData(byte[] buffer, int count)
     {
+        long prev = Interlocked.Read(ref _bytesReceived);
         Interlocked.Add(ref _bytesReceived, count);
-        _reassembler.Push(buffer, count);
+
+        // Log a hex dump of the very first bytes for debugging PIO byte issues
+        if (!_hexDumpDone && prev < HexDumpBytes)
+        {
+            int dumpLen = (int)Math.Min(count, HexDumpBytes - prev);
+            var hex = new System.Text.StringBuilder(dumpLen * 3 + 40);
+            hex.Append($"[lvds] first-bytes hex (offset {prev}, len {dumpLen}): ");
+            for (int i = 0; i < dumpLen; i++)
+            {
+                hex.Append(buffer[i].ToString("X2"));
+                if (i < dumpLen - 1) hex.Append(' ');
+            }
+            _log(hex.ToString());
+            if (prev + count >= HexDumpBytes) _hexDumpDone = true;
+        }
+
+        // Intercept firmware status response if a query is pending.
+        // The firmware stops PIO data flow before sending "MODE=...\n",
+        // so the status string arrives as a clean burst in the data stream.
+        if (_interceptStatus)
+        {
+            for (int i = 0; i <= count - 5; i++)
+            {
+                if (buffer[i] == (byte)'M' && buffer[i + 1] == (byte)'O' &&
+                    buffer[i + 2] == (byte)'D' && buffer[i + 3] == (byte)'E' &&
+                    buffer[i + 4] == (byte)'=')
+                {
+                    // Extract from "MODE=" to newline or end of buffer
+                    int end = i + 5;
+                    while (end < count && buffer[end] != (byte)'\n') end++;
+                    string response = System.Text.Encoding.ASCII.GetString(buffer, i, end - i).Trim();
+                    _interceptStatus = false;
+                    _log($"[lvds] firmware status intercepted: {response}");
+                    var cb = _statusCallback;
+                    _statusCallback = null;
+                    cb?.Invoke(response);
+                    // Don't push status text through receiver
+                    // (PIO was paused anyway, so no real pixel data is mixed in)
+                    return;
+                }
+            }
+        }
+
+        _receiver.Push(buffer, count);
     }
 
-    private void OnReassembledFrame(byte[] frame, LvdsFrameMeta meta)
+    private void OnReceivedFrame(byte[] frame, LvdsFrameMeta meta)
     {
         // Update FPS estimate
         Interlocked.Increment(ref _fpsFrameCount);
@@ -285,15 +372,15 @@ public sealed class LvdsLiveManager : IDisposable
                 : _fpsEma * (1.0 - _fpsAlpha) + instantFps * _fpsAlpha;
         }
 
-        // Store latest frame
-        if (frame.Length <= _lvdsFrame.Length)
-        {
-            Buffer.BlockCopy(frame, 0, _lvdsFrame, 0, frame.Length);
-            _hasFrame = true;
-            _lastFrameUtc = DateTime.UtcNow;
-        }
+        // Firmware sends complete, CRC-verified frames.
+        // No persistent merging needed — just copy and forward.
+        int needed = frame.Length;
+        if (_lvdsFrame.Length != needed)
+            _lvdsFrame = new byte[needed];
+        Buffer.BlockCopy(frame, 0, _lvdsFrame, 0, needed);
+        _hasFrame = true;
+        _lastFrameUtc = DateTime.UtcNow;
 
-        // Forward to subscribers
         OnFrameReady?.Invoke(frame, meta);
     }
 
@@ -302,6 +389,6 @@ public sealed class LvdsLiveManager : IDisposable
     public void Dispose()
     {
         StopCapture();
-        _reassembler.OnFrameReady -= OnReassembledFrame;
+        _receiver.OnFrameReady -= OnReceivedFrame;
     }
 }

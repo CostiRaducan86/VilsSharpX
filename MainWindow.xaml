@@ -1,7 +1,7 @@
 ﻿<Window x:Class="VilsSharpX.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="VILS SharpX" Width="1880" Height="1100" WindowStartupLocation="CenterScreen"
+    Title="VILS SharpX" Width="1880" Height="1000" WindowStartupLocation="CenterScreen"
     UseLayoutRounding="True" SnapsToDevicePixels="True"
         Loaded="Window_Loaded" Closing="Window_Closing">
     <Window.Resources>
@@ -384,6 +384,9 @@
                         <Button x:Name="BtnPicoBoot" Content="&#x1F504; Boot" Click="BtnPicoBoot_Click" Padding="8,4" Width="64" Margin="8,0,0,0"
                                 ToolTip="Reboot Pico 2 into USB bootloader (BOOTSEL mode) for firmware update. The COM port will disconnect and RPI-RP2 drive will appear."
                                 Foreground="DarkOrange"/>
+                        <Button x:Name="BtnFirmwareStatus" Content="📡 Status" Click="BtnFirmwareStatus_Click" Padding="8,4" Width="72" Margin="4,0,0,0"
+                                ToolTip="Query Pico 2 firmware status (mode, baud rate, bytes received). Only works when capture is NOT running."
+                                Foreground="SteelBlue"/>
                     </StackPanel>
 
                     <!-- Separator -->

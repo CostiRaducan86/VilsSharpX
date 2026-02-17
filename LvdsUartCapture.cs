@@ -22,9 +22,11 @@ public sealed class LvdsUartCapture : IDisposable
     private readonly Action<byte[], int> _onDataReceived;
     private readonly Action<string>? _log;
     private volatile bool _disposed;
+    private Thread? _readThread;
 
-    // Read buffer (64 KB to handle high-throughput UART data)
+    // Pre-allocated read buffer (eliminates GC pressure at ~849 KB/s)
     private const int ReadBufferSize = 65536;
+    private readonly byte[] _readBuf = new byte[ReadBufferSize];
 
     public string PortName { get; }
     public bool IsOpen => _port?.IsOpen == true;
@@ -59,7 +61,10 @@ public sealed class LvdsUartCapture : IDisposable
     }
 
     /// <summary>
-    /// Opens the serial port and starts asynchronous reading.
+    /// Opens the serial port and starts a dedicated read thread.
+    /// Using a blocking read loop (instead of DataReceived event) ensures the Windows
+    /// USB driver always has a pending read URB, maximizing USB bulk IN throughput.
+    /// The pre-allocated buffer eliminates GC allocations at high data rates.
     /// </summary>
     public static LvdsUartCapture Start(string portName, LvdsUartConfig config,
                                          Action<byte[], int> onDataReceived, Action<string>? log)
@@ -69,10 +74,19 @@ public sealed class LvdsUartCapture : IDisposable
         {
             capture._port!.Open();
             capture._port.DiscardInBuffer();
-            capture._port.DataReceived += capture.OnSerialDataReceived;
+
+            // Start dedicated read thread (high priority to avoid USB stalls)
+            capture._readThread = new Thread(capture.ReadLoop)
+            {
+                Name = $"LVDS-{portName}",
+                IsBackground = true,
+                Priority = ThreadPriority.AboveNormal,
+            };
+            capture._readThread.Start();
 
             log?.Invoke($"[lvds-uart] opened {portName} @ {config.BaudRate} baud, " +
-                        $"{config.DataBits}{config.Parity.ToString()[0]}{(config.StopBits == StopBits.One ? "1" : "2")}");
+                        $"{config.DataBits}{config.Parity.ToString()[0]}{(config.StopBits == StopBits.One ? "1" : "2")} " +
+                        $"(dedicated read thread)");
         }
         catch (Exception ex)
         {
@@ -97,29 +111,52 @@ public sealed class LvdsUartCapture : IDisposable
         }
     }
 
-    private void OnSerialDataReceived(object sender, SerialDataReceivedEventArgs e)
+    /// <summary>
+    /// Dedicated read loop running on a background thread.
+    /// Uses blocking <see cref="System.IO.Stream.Read"/> on the BaseStream to ensure
+    /// the Windows USB driver always has a pending read URB.  BaseStream bypasses
+    /// SerialPort's internal locking and character decoding, reducing overhead at
+    /// high data rates (~849 KB/s).
+    /// The pre-allocated <see cref="_readBuf"/> is safe to reuse because the callback
+    /// (<see cref="LvdsFrameReassembler.Push(byte[], int)"/>) processes bytes synchronously.
+    /// </summary>
+    private void ReadLoop()
     {
-        if (_disposed || _port == null || !_port.IsOpen) return;
-
+        // Grab BaseStream reference once — avoids repeated property access
+        System.IO.Stream? stream = null;
         try
         {
-            int available = _port.BytesToRead;
-            if (available <= 0) return;
+            stream = _port?.BaseStream;
+        }
+        catch { /* port may have closed */ }
 
-            var buffer = new byte[Math.Min(available, ReadBufferSize)];
-            int read = _port.Read(buffer, 0, buffer.Length);
-            if (read > 0)
+        while (!_disposed && stream != null)
+        {
+            try
             {
-                _onDataReceived(buffer, read);
+                int read = stream.Read(_readBuf, 0, _readBuf.Length);
+                if (read > 0)
+                    _onDataReceived(_readBuf, read);
+                else if (read == 0)
+                    Thread.Sleep(1); // EOF-like condition, avoid tight spin
             }
-        }
-        catch (TimeoutException)
-        {
-            // Normal during idle periods
-        }
-        catch (Exception ex) when (!_disposed)
-        {
-            _log?.Invoke($"[lvds-uart] read error: {ex.Message}");
+            catch (TimeoutException)
+            {
+                // Normal when no data arrives within ReadTimeout — loop back
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (System.IO.IOException) when (_disposed)
+            {
+                break; // Port closed during dispose
+            }
+            catch (Exception ex) when (!_disposed)
+            {
+                _log?.Invoke($"[lvds-uart] read error: {ex.Message}");
+                Thread.Sleep(10); // Avoid tight loop on persistent errors
+            }
         }
     }
 
@@ -186,6 +223,88 @@ public sealed class LvdsUartCapture : IDisposable
         port.Close();
     }
 
+    /// <summary>
+    /// Query firmware status by sending 'S' command to Pico 2 on the specified COM port.
+    /// Opens the port briefly, sends 'S', waits for a response, and returns it.
+    /// Expected response: "MODE=NICHIA BAUD=12500000 BYTES=nnn\n"
+    /// Returns null if no response within timeout.
+    /// </summary>
+    public static string? QueryFirmwareStatus(string portName, Action<string>? log = null, int waitMs = 500)
+    {
+        try
+        {
+            using var port = new SerialPort(portName)
+            {
+                BaudRate = 115200,
+                DataBits = 8,
+                Parity = Parity.None,
+                StopBits = StopBits.One,
+                Handshake = Handshake.None,
+                ReadTimeout = waitMs,
+                WriteTimeout = 500,
+                DtrEnable = true,
+            };
+            port.Open();
+
+            // Let DTR settle and firmware process connection event
+            Thread.Sleep(100);
+            port.DiscardInBuffer();
+
+            port.Write(new byte[] { (byte)'S' }, 0, 1);
+            log?.Invoke($"[lvds-uart] sent status query 'S' to {portName}");
+
+            // Wait for firmware to respond
+            Thread.Sleep(waitMs);
+
+            int available = port.BytesToRead;
+            if (available <= 0)
+            {
+                log?.Invoke($"[lvds-uart] no status response from {portName}");
+                return null;
+            }
+
+            var buf = new byte[Math.Min(available, 1024)];
+            int read = port.Read(buf, 0, buf.Length);
+
+            // The response may be interleaved with PIO data bytes.
+            // Extract only printable ASCII characters and look for the "MODE=" pattern.
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < read; i++)
+            {
+                char c = (char)buf[i];
+                if (c >= ' ' && c <= '~') sb.Append(c);  // printable ASCII
+                else if (c == '\n' || c == '\r') sb.Append(' ');
+            }
+
+            string rawText = sb.ToString().Trim();
+            log?.Invoke($"[lvds-uart] raw response ({read} bytes, {rawText.Length} printable): {rawText}");
+
+            // Try to extract the "MODE=..." status line from the response
+            int modeIdx = rawText.IndexOf("MODE=", StringComparison.OrdinalIgnoreCase);
+            if (modeIdx >= 0)
+            {
+                string response = rawText[modeIdx..].Trim();
+                log?.Invoke($"[lvds-uart] firmware status from {portName}: {response}");
+                return response;
+            }
+
+            // No "MODE=" found — return whatever printable text we got (or null if empty)
+            if (rawText.Length > 0)
+            {
+                log?.Invoke($"[lvds-uart] unexpected response from {portName}: {rawText}");
+                return rawText;
+            }
+
+            log?.Invoke($"[lvds-uart] no printable response from {portName} ({read} raw bytes)");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[lvds-uart] status query failed on {portName}: {ex.Message}");
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -195,7 +314,6 @@ public sealed class LvdsUartCapture : IDisposable
         {
             if (_port != null)
             {
-                _port.DataReceived -= OnSerialDataReceived;
                 if (_port.IsOpen)
                 {
                     _port.DiscardInBuffer();
@@ -204,6 +322,10 @@ public sealed class LvdsUartCapture : IDisposable
                 _port.Dispose();
                 _port = null;
             }
+
+            // Wait for read thread to exit (Close() above unblocks the Read call)
+            _readThread?.Join(2000);
+            _readThread = null;
         }
         catch (Exception ex)
         {

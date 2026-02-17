@@ -165,6 +165,10 @@ namespace VilsSharpX
         private readonly DispatcherTimer _overlayTimerB;
         private readonly DispatcherTimer _overlayTimerD;
 
+        // Periodic timer for LVDS stats refresh (shows byte counter even without complete frames)
+        private DispatcherTimer? _lvdsStatsTimer;
+        private DateTime _statusOverrideUntil = DateTime.MinValue;
+
         private bool _overlayPendingA;
         private bool _overlayPendingB;
         private bool _overlayPendingD;
@@ -745,8 +749,11 @@ namespace VilsSharpX
 
             _playback.IncrementCountAvtpIn();
 
-            int expectedHeight = GetCurrentHeight();
-            bool incomplete = meta.linesWritten != expectedHeight;
+            // AVTP/RVF always sends RvfProtocol.H lines (80) regardless of device active height.
+            // Compare against that, not the device's active crop height.
+            int rvfHeight = RvfProtocol.H;
+            int displayHeight = GetCurrentHeight();
+            bool incomplete = meta.linesWritten < rvfHeight;
             bool gap = meta.seqGaps > 0;
             if (incomplete) _playback.IncrementCountAvtpIncomplete();
             if (gap)
@@ -768,8 +775,10 @@ namespace VilsSharpX
             };
             _liveCapture.LastRvfSrcLabel = src;
 
+            // For display, clamp linesWritten to display height so Nichia shows "64/64" not "80/64".
+            int displayLines = Math.Min(meta.linesWritten, displayHeight);
             LblStatus.Text = StatusFormatter.FormatAvtpRvfStatus(
-                src, meta.frameId, meta.seq, meta.linesWritten, expectedHeight, meta.seqGaps,
+                src, meta.frameId, meta.seq, displayLines, displayHeight, meta.seqGaps,
                 _playback.CountAvtpDropped, _playback.CountAvtpSeqGapFrames,
                 _playback.CountAvtpIncomplete, _playback.CountLateFramesSkipped);
         }
@@ -984,8 +993,13 @@ namespace VilsSharpX
             CmbLvdsPort.Items.Clear();
             CmbLvdsPort.Items.Add("<None>");
 
+            // Deduplicate port names (Windows can report the same port twice via stale registry entries)
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var port in LvdsLiveManager.ListPorts())
-                CmbLvdsPort.Items.Add(port);
+            {
+                if (seen.Add(port))
+                    CmbLvdsPort.Items.Add(port);
+            }
 
             // Try to restore last selection
             int idx = 0;
@@ -1026,8 +1040,10 @@ namespace VilsSharpX
                 _lvdsManager.StartCapture(_lvdsPortHint);
                 BtnLvdsStart.IsEnabled = false;
                 BtnLvdsStop.IsEnabled = true;
-                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint}...";
+                BtnFirmwareStatus.IsEnabled = true; // Status works during capture (firmware pauses PIO)
+                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — waiting for data...";
                 UpdateLvdsProtocolLabel();
+                StartLvdsStatsTimer();
             }
             catch (Exception ex)
             {
@@ -1037,24 +1053,37 @@ namespace VilsSharpX
 
         private void BtnLvdsStop_Click(object sender, RoutedEventArgs e)
         {
+            StopLvdsStatsTimer();
             _lvdsManager.StopCapture();
             BtnLvdsStart.IsEnabled = true;
             BtnLvdsStop.IsEnabled = false;
+            BtnFirmwareStatus.IsEnabled = true;
             LblLvdsStatus.Text = "Stopped.";
             LblLvdsFrameCount.Text = "Frames: 0";
             LblLvdsBytesReceived.Text = "Bytes: 0";
             LblLvdsSyncLoss.Text = "Sync losses: 0";
             LblLvdsFps.Text = "FPS: --";
+
+            // Clear panes to "Signal not available" (same behavior as main Stop button)
+            ClearLvdsPanes();
         }
 
         private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
         {
+            // Guard: reject stale callbacks that arrive via Dispatcher.BeginInvoke
+            // after Stop Test / Stop LVDS has already been pressed.
+            // Without this, queued callbacks re-render the last frame over "No Signal".
+            if (!_lvdsManager.IsCapturing && (_lvdsSimSource == null || !_lvdsSimSource.IsRunning))
+                return;
+
             // Update LVDS stats labels
-            LblLvdsFrameCount.Text = $"Frames: {meta.FrameId} ({meta.LinesReceived}/{meta.LinesExpected} lines)";
+            LblLvdsFrameCount.Text = $"Frames: {meta.FrameId} ({meta.ValidLines}/{meta.LinesExpected} lines)";
             LblLvdsBytesReceived.Text = $"Bytes: {meta.TotalBytes:N0}";
             LblLvdsSyncLoss.Text = $"Sync: {meta.SyncLosses}  CRC: {meta.CrcErrors}  Parity: {meta.ParityErrors}";
             LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
-            LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
+            // Status text is handled by the stats timer to avoid overwriting Status button output
+            if (DateTime.UtcNow > _statusOverrideUntil)
+                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
 
             // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
@@ -1147,9 +1176,11 @@ namespace VilsSharpX
             _lvdsSimSource = new LvdsSimulatedSource(_currentDeviceType, targetFps: 30, AppendDiagLog);
             _lvdsSimSource.OnDataGenerated += OnSimulatedLvdsData;
 
-            // Reset reassembler and manager state, then start sim
+            // Reset reassembler and manager state, then start sim.
+            // NOTE: ReconfigureForDevice rebuilds the internal reassembler, but the
+            // OnFrameReady event on the manager itself persists (subscribed in Window_Loaded
+            // and ReinitializeForNewResolution), so we do NOT re-add the handler here.
             _lvdsManager.ReconfigureForDevice(_currentDeviceType);
-            _lvdsManager.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
             _lvdsSimSource.Start();
 
             BtnLvdsTest.Content = "Stop Test";
@@ -1176,6 +1207,137 @@ namespace VilsSharpX
             BtnLvdsStart.IsEnabled = true;
             LblLvdsStatus.Text = "Simulation stopped.";
             AppendDiagLog("[lvds-sim] test mode stopped");
+
+            // Clear panes to "Signal not available" (same behavior as main Stop button)
+            ClearLvdsPanes();
+        }
+
+        /// <summary>
+        /// Resets panes to "Signal not available" and clears stored LVDS frame data.
+        /// Called when Stop LVDS or Stop Test is pressed.
+        /// </summary>
+        private void ClearLvdsPanes()
+        {
+            lock (_frameLock)
+            {
+                _latestB = null;
+            }
+            _lvdsManager.ClearFrame();
+            RenderNoSignalFrames();
+            ApplyNoSignalUiState(noSignal: true);
+        }
+
+        // ── LVDS Stats Timer ───────────────────────────────────────────
+        // Periodically refreshes LVDS byte/frame counters even when no
+        // complete frames have arrived yet. This is critical for diagnosing
+        // whether the serial port is receiving any data at all.
+
+        private void StartLvdsStatsTimer()
+        {
+            StopLvdsStatsTimer();
+            _lvdsStatsTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+            _lvdsStatsTimer.Tick += LvdsStatsTimer_Tick;
+            _lvdsStatsTimer.Start();
+        }
+
+        private void StopLvdsStatsTimer()
+        {
+            if (_lvdsStatsTimer != null)
+            {
+                _lvdsStatsTimer.Stop();
+                _lvdsStatsTimer.Tick -= LvdsStatsTimer_Tick;
+                _lvdsStatsTimer = null;
+            }
+        }
+
+        private void LvdsStatsTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!_lvdsManager.IsCapturing) return;
+            if (DateTime.UtcNow < _statusOverrideUntil) return; // don't overwrite Status button output
+
+            var (frames, syncLosses, crcErrors, parityErrors, totalBytes) = _lvdsManager.GetReassemblerStats();
+            long rawBytes = _lvdsManager.BytesReceived;
+
+            // Update frame stats labels with current values
+            LblLvdsFrameCount.Text = $"Frames: {frames}";
+            LblLvdsBytesReceived.Text = $"Bytes: {rawBytes:N0} (parsed: {totalBytes:N0})";
+            LblLvdsSyncLoss.Text = $"Sync: {syncLosses}  CRC: {crcErrors}  Parity: {parityErrors}";
+            LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
+
+            // Update status with diagnostic context when no data flows
+            if (rawBytes == 0 && frames == 0)
+            {
+                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — ⚠ 0 bytes received. " +
+                    "Check: (1) Pico 2 firmware running? Use 📡 Status. " +
+                    "(2) ECU LVDS signal connected to GPIO 2?";
+                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
+            }
+            else if (rawBytes > 0 && frames == 0)
+            {
+                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — {rawBytes:N0} bytes received, " +
+                    "but no valid frames yet (cooked frame magic 0xFE 0xED not found).";
+                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGoldenrod;
+            }
+        }
+
+        // ── Firmware Status Query ──────────────────────────────────────
+
+        private void BtnFirmwareStatus_Click(object sender, RoutedEventArgs e)
+        {
+            string? portName = CmbLvdsPort.SelectedItem as string;
+            if (string.IsNullOrEmpty(portName))
+            {
+                LblLvdsStatus.Text = "Select a COM port first.";
+                return;
+            }
+
+            if (_lvdsManager.IsCapturing)
+            {
+                // Send 'S' command through the active capture connection.
+                // Firmware pauses PIO, sends status, resumes — response arrives in data stream.
+                _statusOverrideUntil = DateTime.UtcNow.AddSeconds(8);
+                LblLvdsStatus.Text = $"Querying firmware on {portName} (via active capture)...";
+                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.SteelBlue;
+
+                _lvdsManager.QueryFirmwareStatusDuringCapture(response =>
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _statusOverrideUntil = DateTime.UtcNow.AddSeconds(8);
+                        LblLvdsStatus.Text = $"Firmware [{portName}]: {response}";
+                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGreen;
+                    });
+                });
+                return;
+            }
+
+            BtnFirmwareStatus.IsEnabled = false;
+            LblLvdsStatus.Text = $"Querying firmware on {portName}...";
+            LblLvdsStatus.Foreground = System.Windows.Media.Brushes.SteelBlue;
+
+            // Run query in background to not block UI
+            Task.Run(() =>
+            {
+                string? response = LvdsUartCapture.QueryFirmwareStatus(portName, AppendDiagLog);
+                Dispatcher.BeginInvoke(() =>
+                {
+                    BtnFirmwareStatus.IsEnabled = true;
+                    if (response != null)
+                    {
+                        LblLvdsStatus.Text = $"Firmware [{portName}]: {response}";
+                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGreen;
+                    }
+                    else
+                    {
+                        LblLvdsStatus.Text = $"No response from {portName}. " +
+                            "Is Pico 2 firmware flashed? Try 🔄 Boot + flash UF2.";
+                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.Red;
+                    }
+                });
+            });
         }
 
         // ── CRC Self-Test ──────────────────────────────────────────────
@@ -1395,6 +1557,7 @@ namespace VilsSharpX
             SaveUiSettings();
             if (_recordingManager.IsRecording) StopRecording();
             StopAll();
+            StopLvdsStatsTimer();
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
         }
 

@@ -46,6 +46,7 @@ public sealed class LvdsFrameReassembler
     // ── Frame accumulation ──────────────────────────────────────────────
     private readonly byte[] _frameBuf;        // W × H_LVDS pixel buffer
     private readonly bool[] _lineReceived;    // which lines have been placed
+    private readonly bool[] _lineCrcOk;       // which lines passed CRC
     private int _linesReceived;
 
     // Frame counter
@@ -87,6 +88,7 @@ public sealed class LvdsFrameReassembler
         _crcBuf = new byte[Math.Max(crcLen, 4)]; // at least 4 for CRC32
         _frameBuf = new byte[width * lvdsHeight];
         _lineReceived = new bool[lvdsHeight];
+        _lineCrcOk = new bool[lvdsHeight];
     }
 
     // ── Public API ──────────────────────────────────────────────────────
@@ -175,6 +177,7 @@ public sealed class LvdsFrameReassembler
         _diagLogLinesRemaining = DiagLogLinesMax;
         Array.Clear(_frameBuf);
         Array.Clear(_lineReceived);
+        Array.Clear(_lineCrcOk);
     }
 
     // ── Internals ───────────────────────────────────────────────────────
@@ -268,6 +271,8 @@ public sealed class LvdsFrameReassembler
             _lineReceived[row] = true;
             _linesReceived++;
         }
+        if (crcOk)
+            _lineCrcOk[row] = true;
 
         // Also emit when all lines have been received (normal completion)
         if (_linesReceived >= _frameHeightLvds)
@@ -285,13 +290,30 @@ public sealed class LvdsFrameReassembler
         var frame = new byte[activeBytes];
         Buffer.BlockCopy(_frameBuf, 0, frame, 0, activeBytes);
 
+        // Build per-line validity mask — caller uses this to merge only
+        // received lines into a persistent frame buffer.
+        // We use "line received" (sync + row matched), NOT CRC-OK,
+        // because CRC currently fails for most lines even though
+        // the pixel data at the correct row position is valid.
+        int validLines = 0;
+        int crcOkLines = 0;
+        var lineValid = new bool[_activeHeight];
+        for (int r = 0; r < _activeHeight && r < _frameHeightLvds; r++)
+        {
+            lineValid[r] = _lineReceived[r];
+            if (_lineReceived[r]) validLines++;
+            if (_lineCrcOk[r]) crcOkLines++;
+        }
+
         var meta = new LvdsFrameMeta
         {
             FrameId = _frameCount,
             Width = _frameWidth,
             Height = _activeHeight,
             LinesReceived = _linesReceived,
+            ValidLines = validLines,
             LinesExpected = _frameHeightLvds,
+            LineValidityMask = lineValid,
             SyncLosses = _syncLossCount,
             CrcErrors = _crcErrorCount,
             ParityErrors = _parityErrorCount,
@@ -301,6 +323,7 @@ public sealed class LvdsFrameReassembler
         // Reset line tracking for next frame
         _linesReceived = 0;
         Array.Clear(_lineReceived);
+        Array.Clear(_lineCrcOk);
         // Keep _frameBuf content — new lines will overwrite
 
         OnFrameReady?.Invoke(frame, meta);
@@ -317,8 +340,13 @@ public sealed record LvdsFrameMeta
     public int Height { get; init; }
     /// <summary>Lines actually received before this frame was emitted.</summary>
     public int LinesReceived { get; init; }
+    /// <summary>Lines that were received (placed at correct row) in this frame.</summary>
+    public int ValidLines { get; init; }
     /// <summary>Expected total lines per frame (H_LVDS).</summary>
     public int LinesExpected { get; init; }
+    /// <summary>Per-line received mask (length = ActiveHeight).
+    /// true = line was received and placed at correct row position.</summary>
+    public bool[] LineValidityMask { get; init; } = Array.Empty<bool>();
     public int SyncLosses { get; init; }
     public int CrcErrors { get; init; }
     public int ParityErrors { get; init; }

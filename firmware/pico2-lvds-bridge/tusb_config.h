@@ -28,14 +28,19 @@ extern "C" {
 
 /* ── CDC buffer sizes ────────────────────────────────────────────── */
 /*
- * At 20 Mbps UART → ~2 MB/s raw data.  USB FS max throughput is
- * ~1 MB/s.  However the actual LVDS duty cycle is much lower
- * (line gaps + frame gaps), so effective data rate is manageable.
+ * At 12.5 Mbps UART, effective data rate is ~849 KB/s.
+ * USB FS bulk max throughput is ~1 MB/s.
  *
- * Use large TX buffer to avoid blocking PIO read loop.
+ * Large TX buffer is critical: it absorbs USB jitter.  When the host
+ * is busy processing a SOF frame, our tud_cdc_write() calls queue
+ * data here.  A larger buffer means the DMA ring stays emptier,
+ * preventing DMA wrap-around overwrite of unread data.
+ *
+ * TX buffer = 8192 bytes → ~9.6 ms of buffering at 849 KB/s.
+ * Combined with DMA ring (6.5 ms), total buffering ≈ 16 ms.
  */
 #define CFG_TUD_CDC_RX_BUFSIZE   512    /* host → device (commands) */
-#define CFG_TUD_CDC_TX_BUFSIZE   4096   /* device → host (UART data) */
+#define CFG_TUD_CDC_TX_BUFSIZE   8192   /* device → host (UART data) */
 
 /* ── Endpoint sizes ──────────────────────────────────────────────── */
 #define CFG_TUD_CDC_EP_BUFSIZE   64     /* USB Full Speed bulk EP */
