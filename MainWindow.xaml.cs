@@ -1056,14 +1056,60 @@ namespace VilsSharpX
             LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
             LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
 
-            // Store frame into _latestB for render
-            if (_playback.IsRunning)
+            // Always store LVDS frame for pane B (used by RenderAll when playback is active)
+            lock (_frameLock)
             {
-                lock (_frameLock)
-                {
-                    _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
-                }
+                _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
             }
+
+            // When the main playback loop is NOT running (user didn't press Start),
+            // render LVDS frame directly on pane B (standalone LVDS capture mode).
+            if (_playback.Cts == null)
+            {
+                RenderLvdsOnly(frame, meta);
+            }
+        }
+
+        /// <summary>
+        /// Renders LVDS frame on pane B (and optionally A/DIFF) when the main
+        /// AVTP playback loop is not active. This allows standalone LVDS capture
+        /// without needing to hit the Start button.
+        /// </summary>
+        private void RenderLvdsOnly(byte[] frame, LvdsFrameMeta meta)
+        {
+            int w = _currentWidth;
+            int h = _currentHeight;
+
+            // Pane B: LVDS frame
+            if (frame.Length == w * h)
+            {
+                BitmapUtils.Blit(_wbB, frame, w);
+            }
+            else if (frame.Length > 0)
+            {
+                // Dimension mismatch — create a padded/cropped buffer
+                var safeFrame = new byte[w * h];
+                int copyLen = Math.Min(frame.Length, safeFrame.Length);
+                Buffer.BlockCopy(frame, 0, safeFrame, 0, copyLen);
+                BitmapUtils.Blit(_wbB, safeFrame, w);
+            }
+
+            // Pane A: show the loaded/generated source frame (gradient if nothing loaded)
+            var aData = GetASourceBytes();
+            BitmapUtils.Blit(_wbA, aData, w);
+
+            // Pane D: |A − B| diff
+            DiffRenderer.RenderCompareToBgr(_diffBgr, aData, frame.Length == w * h ? frame : _noSignalGrayFrame,
+                w, h, _diffThreshold, _zeroZeroIsWhite,
+                out var minDiff, out var maxDiff, out var meanDiff,
+                out var maxAbsDiff, out var meanAbsDiff, out var aboveDeadband,
+                out var totalDarkPixels);
+            BitmapUtils.Blit(_wbD, _diffBgr, w * 3);
+
+            if (LblDiffStats != null)
+                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels);
+
+            ApplyNoSignalUiState(noSignal: false);
         }
 
         private void UpdateLvdsProtocolLabel()
