@@ -136,7 +136,8 @@ static uint32_t fw_frame_id     = 0;
 static uint32_t frames_sent     = 0;
 static uint32_t frames_dropped  = 0;
 static uint32_t crc_errors      = 0;
-static uint32_t crc_ok_lines    = 0;  /* lines placed with valid CRC */
+static uint32_t crc_ok_lines    = 0;  /* lines with valid CRC */
+static uint32_t row_seq_skip    = 0;  /* lines skipped due to row sequence mismatch */
 static uint32_t gap_bytes_total = 0;  /* total gap/idle bytes skipped */
 static uint32_t gap_resyncs     = 0;  /* times gap exceeded budget -> rescan */
 static uint32_t total_usb_bytes = 0;
@@ -157,7 +158,7 @@ static void restart_capture(protocol_mode_t mode);
 static void reset_frame_state(void);
 static void process_host_commands(void);
 static void parse_ring_data(void);
-static bool handle_complete_line(void);   /* returns true if CRC ok */
+static void handle_complete_line(void);
 static void emit_assembled_frame(void);
 static void send_frame_chunk(void);
 static void update_led(void);
@@ -297,18 +298,10 @@ static void parse_ring_data(void)
             }
 
             if (line_pos >= proto->line_size) {
-                bool crc_ok = handle_complete_line();
+                handle_complete_line();
+                frame_locked = true;
                 line_pos = 0;
-                if (crc_ok) {
-                    /* CRC passed => alignment is correct */
-                    frame_locked = true;
-                    gap_budget = MAX_GAP_BYTES;
-                } else {
-                    /* CRC failed => likely false 0x5D match in gap.
-                     * Don't trust alignment; scan for real next sync
-                     * with extended budget (gap + one full line). */
-                    gap_budget = MAX_GAP_BYTES + proto->line_size;
-                }
+                gap_budget = MAX_GAP_BYTES;
                 ps = SCAN_GAP;
             }
             break;
@@ -320,40 +313,43 @@ static void parse_ring_data(void)
     ring_rd = rd;
 }
 
-static bool handle_complete_line(void)
+static void handle_complete_line(void)
 {
     /* Extract row address (Nichia: mask off parity bit) */
     int row = extract_row(line_data[1]);
 
-    /* CRC validation: only place lines with correct CRC.
-     * False 0x5D matches in gap data produce misaligned lines
-     * whose CRC will almost certainly fail. */
+    /* CRC diagnostic only (algorithm does not match Nichia device) */
     uint16_t crc_exp = ((uint16_t)line_data[proto->line_size - 2] << 8)
                      | line_data[proto->line_size - 1];
     uint16_t crc_got = crc16_ccitt(line_data + 2, proto->width);
 
-    if (crc_got != crc_exp) {
+    if (crc_got != crc_exp)
         crc_errors++;
-        return false;   /* don't place; caller will resync */
-    }
-
-    crc_ok_lines++;
+    else
+        crc_ok_lines++;
 
     /* Frame boundary: row decreased -> new frame */
     if (row <= prev_row && prev_row >= 0 && lines_placed > 0)
         emit_assembled_frame();
 
+    /* Row-sequence validation: within a frame, rows should increase
+     * by exactly 1 each line (0, 1, 2, ..., 67).  A line from a
+     * false 0x5D match in gap data will have a random row number.
+     * Only place pixels when row matches the expected sequence.
+     * Frame start (prev_row == -1) always accepted. */
+    bool row_ok = (prev_row < 0) || (row == prev_row + 1);
     prev_row = row;
 
-    if (row < proto->active_height) {
+    if (row_ok && row < proto->active_height) {
         memcpy(asm_fb + row * proto->width,
                line_data + 2, proto->width);
         if (!line_placed[row]) {
             line_placed[row] = true;
             lines_placed++;
         }
+    } else if (!row_ok) {
+        row_seq_skip++;
     }
-    return true;
 }
 
 static void emit_assembled_frame(void)
@@ -562,11 +558,12 @@ static void process_host_commands(void)
 
         char status[300];
         int len = snprintf(status, sizeof(status),
-            "MODE=%s BAUD=%u USB=%u SENT=%u DROP=%u CRC_OK=%u CRC_ERR=%u GAP=%u RESYNC=%u MAXFILL=%u/%u\n",
+            "MODE=%s BAUD=%u USB=%u SENT=%u DROP=%u CRC_OK=%u CRC_ERR=%u ROW_SKIP=%u GAP=%u RESYNC=%u MAXFILL=%u/%u\n",
             current_mode == MODE_NICHIA ? "NICHIA" : "OSRAM",
             proto->baud,
             total_usb_bytes, frames_sent, frames_dropped,
-            crc_ok_lines, crc_errors, gap_bytes_total, gap_resyncs,
+            crc_ok_lines, crc_errors, row_seq_skip,
+            gap_bytes_total, gap_resyncs,
             max_fill, RING_SIZE);
         tud_cdc_write(status, len);
         tud_cdc_write_flush();
@@ -589,6 +586,7 @@ static void process_host_commands(void)
         frames_dropped = 0;
         crc_errors = 0;
         crc_ok_lines = 0;
+        row_seq_skip = 0;
         gap_bytes_total = 0;
         gap_resyncs = 0;
         max_fill = 0;
