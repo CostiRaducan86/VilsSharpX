@@ -381,6 +381,9 @@
                         <Button x:Name="BtnLvdsStop" Content="Stop LVDS" Click="BtnLvdsStop_Click" Padding="8,4" Width="90" IsEnabled="False" Margin="0,0,8,0"/>
                         <Button x:Name="BtnLvdsTest" Content="Test" Click="BtnLvdsTest_Click" Padding="8,4" Width="56"
                                 ToolTip="Run simulated LVDS data (no hardware needed) to validate the pipeline."/>
+                        <Button x:Name="BtnPicoBoot" Content="&#x1F504; Boot" Click="BtnPicoBoot_Click" Padding="8,4" Width="64" Margin="8,0,0,0"
+                                ToolTip="Reboot Pico 2 into USB bootloader (BOOTSEL mode) for firmware update. The COM port will disconnect and RPI-RP2 drive will appear."
+                                Foreground="DarkOrange"/>
                     </StackPanel>
 
                     <!-- Separator -->

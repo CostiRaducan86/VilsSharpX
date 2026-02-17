@@ -1145,6 +1145,69 @@ namespace VilsSharpX
             AppendDiagLog(report);
         }
 
+        // ── Pico 2 Bootloader ──────────────────────────────────────────
+
+        private void BtnPicoBoot_Click(object sender, RoutedEventArgs e)
+        {
+            // Get the selected COM port
+            string? portName = CmbLvdsPort.SelectedItem as string;
+            if (string.IsNullOrEmpty(portName))
+            {
+                LblLvdsStatus.Text = "Select a COM port first.";
+                return;
+            }
+
+            // Confirm with the user
+            var result = System.Windows.MessageBox.Show(
+                $"Reboot Pico 2 on {portName} into bootloader (BOOTSEL) mode?\n\n" +
+                "The COM port will disconnect and the device will appear\n" +
+                "as a USB mass-storage drive (RPI-RP2) for firmware update.",
+                "Enter Bootloader",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question);
+
+            if (result != System.Windows.MessageBoxResult.Yes) return;
+
+            try
+            {
+                // Stop simulation if running
+                if (_lvdsSimSource?.IsRunning == true) StopLvdsSimulation();
+
+                // Send bootloader command (handles both capturing and non-capturing states)
+                _lvdsManager.EnterBootloader(portName);
+
+                BtnLvdsStart.IsEnabled = false;
+                BtnLvdsStop.IsEnabled = false;
+                BtnPicoBoot.IsEnabled = false;
+                LblLvdsStatus.Text = $"Pico 2 rebooting into bootloader... COM port will disconnect.";
+                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
+
+                AppendDiagLog($"[lvds] Pico 2 on {portName} sent to bootloader mode.");
+
+                // Re-enable after a short delay (port will be gone by then)
+                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                timer.Tick += (s, _) =>
+                {
+                    timer.Stop();
+                    BtnLvdsStart.IsEnabled = true;
+                    BtnPicoBoot.IsEnabled = true;
+                    LblLvdsStatus.Text = "Pico 2 is in bootloader mode. Copy UF2 to RPI-RP2 drive, then Refresh ports.";
+                    LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DimGray;
+                    // Auto-refresh port list (the old port is gone)
+                    RefreshLvdsPortList();
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                LblLvdsStatus.Text = $"Boot failed: {ex.Message}";
+                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.Red;
+                BtnLvdsStart.IsEnabled = true;
+                BtnPicoBoot.IsEnabled = true;
+                AppendDiagLog($"[lvds] bootloader command failed: {ex.Message}");
+            }
+        }
+
         private void RunStartupCrcSelfTest()
         {
             var (allPassed, report) = LvdsCrc.RunSelfTestFormatted();

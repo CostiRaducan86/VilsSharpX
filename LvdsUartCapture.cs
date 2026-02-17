@@ -150,6 +150,42 @@ public sealed class LvdsUartCapture : IDisposable
         _log?.Invoke($"[lvds-uart] sent mode command: {(char)cmd}");
     }
 
+    /// <summary>
+    /// Send 'B' command to reboot Pico 2 into USB bootloader (BOOTSEL mode).
+    /// After this, the COM port will disconnect and the Pico 2 will appear
+    /// as a USB mass-storage drive (RPI-RP2) for UF2 flashing.
+    /// </summary>
+    public void SendBootloaderCommand()
+    {
+        Send(new[] { (byte)'B' });
+        _log?.Invoke("[lvds-uart] sent bootloader command 'B' — Pico 2 will reboot into BOOTSEL mode");
+    }
+
+    /// <summary>
+    /// Send 'B' command to a Pico 2 on the specified COM port to enter BOOTSEL mode,
+    /// even when no capture session is active.
+    /// Opens the port briefly at 115200 baud (command channel), sends 'B', and closes.
+    /// </summary>
+    public static void SendBootloaderCommandTo(string portName, Action<string>? log = null)
+    {
+        using var port = new SerialPort(portName)
+        {
+            BaudRate = 115200,
+            DataBits = 8,
+            Parity = Parity.None,
+            StopBits = StopBits.One,
+            Handshake = Handshake.None,
+            ReadTimeout = 500,
+            WriteTimeout = 500,
+            DtrEnable = true,
+        };
+        port.Open();
+        port.Write(new byte[] { (byte)'B' }, 0, 1);
+        log?.Invoke($"[lvds-uart] sent bootloader command 'B' to {portName}");
+        System.Threading.Thread.Sleep(100); // let the byte go out
+        port.Close();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

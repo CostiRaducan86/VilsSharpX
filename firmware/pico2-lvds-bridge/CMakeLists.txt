@@ -7,6 +7,7 @@ include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 project(pico2_lvds_bridge C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Target: Raspberry Pi Pico 2 (RP2350)
 set(PICO_BOARD pico2)

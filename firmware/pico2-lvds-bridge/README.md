@@ -6,17 +6,17 @@ This firmware turns a Raspberry Pi Pico 2 (on the gusmanb LogicAnalyzer
 level-shifting board) into a high-speed UART-to-USB CDC bridge for
 capturing LVDS video data from automotive ECU→LSM links.
 
-```
+```text
 LVDS signal → NBA3N012C → TTL → Ch1/GPIO2 → PIO UART RX → USB CDC → PC (VilsSharpX)
               (receiver)        (board pin)   (RP2350)       (COM port)
 ```
 
 ## Supported Modes
 
-| Mode    | Baud Rate  | UART Config | PIO Oversampling | Clock Divider |
-|---------|------------|-------------|------------------|---------------|
-| Nichia  | 12.5 Mbps  | 8N1         | 8×               | 1.5           |
-| Osram   | 20 Mbps    | 8O1*        | 4×               | 1.875         |
+| Mode   | Baud Rate | UART Config | PIO Oversampling | Clock Divider |
+|--------|-----------|-------------|------------------|---------------|
+| Nichia | 12.5 Mbps | 8N1         | 8×               | 1.5           |
+| Osram  | 20 Mbps   | 8O1*        | 4×               | 1.875         |
 
 *Osram line parity is ignored at PIO level — raw 8-bit data is forwarded.
 
@@ -33,12 +33,13 @@ Channel 1 on the LogicAnalyzer board maps to **GPIO 2** on the Pico 2.
 
 Send a single byte over the CDC serial port:
 
-| Command | Action                                 |
-|---------|----------------------------------------|
-| `N`     | Switch to Nichia mode (12.5 Mbps)      |
-| `O`     | Switch to Osram mode (20 Mbps)         |
+| Command | Action                                   |
+|---------|------------------------------------------|
+| `N`     | Switch to Nichia mode (12.5 Mbps)        |
+| `O`     | Switch to Osram mode (20 Mbps)           |
 | `S`     | Query status (returns mode + byte count) |
-| `R`     | Reset statistics                       |
+| `R`     | Reset statistics                         |
+| `B`     | Reboot into USB bootloader (BOOTSEL)     |
 
 Default mode on power-up: **Nichia** (12.5 Mbps).
 
@@ -89,6 +90,7 @@ Output: `pico2_lvds_bridge.uf2`
 
 The firmware forwards **raw UART bytes** with no additional framing.
 The VilsSharpX PC application (`LvdsFrameReassembler`) handles:
+
 - Sync detection (`0x5D` per line)
 - Row address extraction
 - Pixel data accumulation

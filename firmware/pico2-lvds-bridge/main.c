@@ -40,6 +40,7 @@
 #include "hardware/gpio.h"
 #include "tusb.h"
 #include "bsp/board_api.h"
+#include "pico/bootrom.h"
 
 // Generated from uart_rx.pio
 #include "uart_rx.pio.h"
@@ -171,6 +172,7 @@ static void restart_capture(protocol_mode_t mode)
  *   'O' — switch to Osram mode (20 Mbps)
  *   'S' — query status (device responds with mode + stats)
  *   'R' — reset statistics
+ *   'B' — reboot into USB bootloader (BOOTSEL mode) for firmware update
  */
 
 static void process_host_commands(void)
@@ -205,6 +207,18 @@ static void process_host_commands(void)
 
         case 'R': case 'r':
             total_bytes = 0;
+            break;
+
+        case 'B': case 'b':
+            /* Reboot into USB bootloader (BOOTSEL mode).
+             * The COM port will disconnect, and the Pico 2 will appear
+             * as a USB mass-storage drive (RPI-RP2) for UF2 flashing.
+             * Parameters: (0, 0) = no activity LED, enable both USB and PICOBOOT. */
+            tud_cdc_write_str("BOOT\n");
+            tud_cdc_write_flush();
+            sleep_ms(50);  /* Give USB time to flush */
+            reset_usb_boot(0, 0);
+            /* Never returns */
             break;
 
         default:

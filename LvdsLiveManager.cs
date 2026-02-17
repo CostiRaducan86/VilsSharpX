@@ -227,6 +227,43 @@ public sealed class LvdsLiveManager : IDisposable
     /// </summary>
     public static string[] ListPorts() => LvdsUartCapture.ListPorts();
 
+    /// <summary>
+    /// Send 'B' command to reboot the Pico 2 into USB bootloader (BOOTSEL mode).
+    /// If a capture session is active, sends via the open port and stops capture.
+    /// If not capturing, opens the specified port briefly and sends the command.
+    /// After this, the COM port will disappear and RPI-RP2 drive will appear.
+    /// </summary>
+    public void EnterBootloader(string? portName = null)
+    {
+        lock (_lock)
+        {
+            if (_capture != null && _capture.IsOpen)
+            {
+                var port = _capture.PortName;
+                _log($"[lvds] sending bootloader command to {port}...");
+                _capture.SendBootloaderCommand();
+                // Give a moment then stop capture (port will disconnect)
+                Thread.Sleep(200);
+                StopCapture();
+            }
+            else if (!string.IsNullOrEmpty(portName))
+            {
+                _log($"[lvds] sending bootloader command to {portName} (not capturing)...");
+                LvdsUartCapture.SendBootloaderCommandTo(portName, _log);
+            }
+            else
+            {
+                _log("[lvds] cannot enter bootloader: no port specified and no active capture");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Static helper: send 'B' boot command to a Pico 2 on the given port.
+    /// </summary>
+    public static void EnterBootloader(string portName, Action<string>? log = null)
+        => LvdsUartCapture.SendBootloaderCommandTo(portName, log);
+
     // ── Callbacks ───────────────────────────────────────────────────────
 
     private void OnSerialData(byte[] buffer, int count)
