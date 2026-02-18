@@ -135,3 +135,5 @@
 3598	44615	7931069289479224	CMakeFiles/pico2_lvds_bridge.dir/C_/Users/raduco3/pico-dev/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj	c5ec70b366964c53
 5762	45751	7931069311332153	CMakeFiles/pico2_lvds_bridge.dir/C_/Users/raduco3/pico-dev/pico-sdk/lib/tinyusb/hw/bsp/rp2040/family.c.obj	83c01e1dbcef2bff
 45761	55765	7931069711114569	pico2_lvds_bridge.elf	aa2967e929985c33
+201	4616	7931186193464945	CMakeFiles/pico2_lvds_bridge.dir/main.c.obj	152f5cef7e5e4124
+4617	7581	7931186237627730	pico2_lvds_bridge.elf	aa2967e929985c33
