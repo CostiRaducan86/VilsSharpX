@@ -1,0 +1,6 @@
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/picotool.exe
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/picotoolTargets.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/picotoolTargets-release.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/picotoolConfig.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/picotoolConfigVersion.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/_deps/picotool/enc_bootloader.elf

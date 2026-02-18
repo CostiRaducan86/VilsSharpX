@@ -1,0 +1,13 @@
+# Target labels
+ pioasmBuild
+# Source files and their labels
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/pioasmBuild
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/pioasmBuild.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/pioasmBuild-complete.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-build.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-configure.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-download.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-install.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-mkdir.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-patch.rule
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm/src/pioasmBuild-stamp/pioasmBuild-update.rule

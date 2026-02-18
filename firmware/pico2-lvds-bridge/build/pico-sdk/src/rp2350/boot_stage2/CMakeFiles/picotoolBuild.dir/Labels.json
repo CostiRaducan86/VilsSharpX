@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/CMakeFiles/picotoolBuild"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/CMakeFiles/picotoolBuild.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/CMakeFiles/picotoolBuild-complete.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-build.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-configure.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-download.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-install.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-mkdir.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-patch.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-test.rule"
+		},
+		{
+			"file" : "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pico-sdk/src/rp2350/boot_stage2/picotool/src/picotoolBuild-stamp/picotoolBuild-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"picotoolBuild"
+		],
+		"name" : "picotoolBuild"
+	}
+}

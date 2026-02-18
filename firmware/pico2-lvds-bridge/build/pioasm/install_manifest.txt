@@ -1,0 +1,5 @@
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm-install/pioasm/pioasm.exe
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm-install/pioasm/pioasmTargets.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm-install/pioasm/pioasmTargets-release.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm-install/pioasm/pioasmConfig.cmake
+C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/pioasm-install/pioasm/pioasmConfigVersion.cmake

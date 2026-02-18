@@ -1,0 +1,552 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineSystem.cmake:200 (message)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      The target system is: PICO -  - cortex-m33
+      The host system is: Windows - 6.2.9200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" failed.
+      Compiler: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/arm-none-eabi-gcc.exe 
+      Build flags: -mcpu=cortex-m33;-mthumb;-march=armv8-m.main+fp+dsp;-mfloat-abi=softfp;-mcmse
+      Id flags:  
+      
+      The output was:
+      1
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-exit.o): in function `exit':
+      exit.c:(.text.exit+0x14): undefined reference to `_exit'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-closer.o): in function `_close_r':
+      closer.c:(.text._close_r+0xc): undefined reference to `_close'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-lseekr.o): in function `_lseek_r':
+      lseekr.c:(.text._lseek_r+0x14): undefined reference to `_lseek'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-readr.o): in function `_read_r':
+      readr.c:(.text._read_r+0x14): undefined reference to `_read'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-writer.o): in function `_write_r':
+      writer.c:(.text._write_r+0x14): undefined reference to `_write'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-sbrkr.o): in function `_sbrk_r':
+      sbrkr.c:(.text._sbrk_r+0xc): undefined reference to `_sbrk'
+      collect2.exe: error: ld returned 1 exit status
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/arm-none-eabi-gcc.exe 
+      Build flags: -mcpu=cortex-m33;-mthumb;-march=armv8-m.main+fp+dsp;-mfloat-abi=softfp;-mcmse
+      Id flags: -c 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      The C compiler identification is GNU, found in:
+        C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/3.30.2/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/arm-none-eabi-g++.exe 
+      Build flags: -mcpu=cortex-m33;-mthumb;-march=armv8-m.main+fp+dsp;-mfloat-abi=softfp;-mcmse
+      Id flags:  
+      
+      The output was:
+      1
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-exit.o): in function `exit':
+      exit.c:(.text.exit+0x14): undefined reference to `_exit'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-closer.o): in function `_close_r':
+      closer.c:(.text._close_r+0xc): undefined reference to `_close'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-lseekr.o): in function `_lseek_r':
+      lseekr.c:(.text._lseek_r+0x14): undefined reference to `_lseek'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-readr.o): in function `_read_r':
+      readr.c:(.text._read_r+0x14): undefined reference to `_read'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-writer.o): in function `_write_r':
+      writer.c:(.text._write_r+0x14): undefined reference to `_write'
+      C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp\\libc.a(libc_a-sbrkr.o): in function `_sbrk_r':
+      sbrkr.c:(.text._sbrk_r+0xc): undefined reference to `_sbrk'
+      collect2.exe: error: ld returned 1 exit status
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/arm-none-eabi-g++.exe 
+      Build flags: -mcpu=cortex-m33;-mthumb;-march=armv8-m.main+fp+dsp;-mfloat-abi=softfp;-mcmse
+      Id flags: -c 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      The CXX compiler identification is GNU, found in:
+        C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/3.30.2/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerId.cmake:1192 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineASMCompiler.cmake:135 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Checking whether the ASM compiler is GNU using "--version" matched "(GNU assembler)|(GCC)|(Free Software Foundation)":
+      arm-none-eabi-gcc.exe (xPack GNU Arm Embedded GCC x86_64) 13.3.1 20240614
+      Copyright (C) 2023 Free Software Foundation, Inc.
+      This is free software; see the source for copying conditions.  There is NO
+      warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-i6jmdb"
+      binary: "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-i6jmdb"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "-mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse"
+      CMAKE_C_FLAGS_DEBUG: "-Og -g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "C:/Users/raduco3/pico-dev/pico-sdk/cmake"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-i6jmdb'
+        
+        Run Build Command(s): C:/mingw64/bin/ninja.exe -v cmTC_2a8eb
+        [1/2] C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe   -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse    -v -o CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj -c C:/mingw64/share/cmake-3.30/Modules/CMakeCCompilerABI.c
+        Using built-in specs.
+        COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe
+        Target: arm-none-eabi
+        Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) 
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/cc1.exe -quiet -v -imultilib thumb/v8-m.main+fp/softfp -iprefix C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/ -isysroot C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -D__USES_INITFINI__ C:/mingw64/share/cmake-3.30/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_2a8eb.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m33 -mthumb -mfloat-abi=softfp -mcmse -mlibarch=armv8-m.main+dsp+fp -march=armv8-m.main+dsp+fp -version -o c:\\temp\\ccG0Ghpp.s
+        GNU C17 (xPack GNU Arm Embedded GCC x86_64) version 13.3.1 20240614 (arm-none-eabi)
+        	compiled by GNU C version 13.2.0, GMP version 6.2.1, MPFR version 3.1.6, MPC version 1.0.3, isl version isl-0.15-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include"
+        ignoring nonexistent directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/lib/gcc/arm-none-eabi/13.3.1/../../../../include"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+        End of search list.
+        Compiler executable checksum: ec427ac1ab153ab88c25b6cc54f3861f
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv8-m.main+dsp+fp -mfloat-abi=softfp -meabi=5 -o CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj c:\\temp\\ccG0Ghpp.s
+        GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (xPack GNU Arm Embedded GCC x86_64) 2.42.0.20240614
+        COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.'\x0d
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse -Wl,--build-id=none -nostdlib -v CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj -o cmTC_2a8eb.elf   && cd ."
+        Using built-in specs.
+        COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe
+        COLLECT_LTO_WRAPPER=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe
+        Target: arm-none-eabi
+        Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) 
+        COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_2a8eb.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_2a8eb.elf.'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe -plugin C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll -plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe -plugin-opt=-fresolution=c:\\temp\\ccz0mV4j.res --sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -X -o cmTC_2a8eb.elf -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1 -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj\x0d
+        C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: cannot find entry symbol _start; defaulting to 00008000\x0d
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_2a8eb.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_2a8eb.elf.'\x0d
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        end of search list found
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include]
+        implicit include dirs: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include-fixed;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: 'C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-i6jmdb']
+        ignore line: []
+        ignore line: [Run Build Command(s): C:/mingw64/bin/ninja.exe -v cmTC_2a8eb]
+        ignore line: [[1/2] C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe   -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse    -v -o CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj -c C:/mingw64/share/cmake-3.30/Modules/CMakeCCompilerABI.c]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/']
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/cc1.exe -quiet -v -imultilib thumb/v8-m.main+fp/softfp -iprefix C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/ -isysroot C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -D__USES_INITFINI__ C:/mingw64/share/cmake-3.30/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_2a8eb.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m33 -mthumb -mfloat-abi=softfp -mcmse -mlibarch=armv8-m.main+dsp+fp -march=armv8-m.main+dsp+fp -version -o c:\\temp\\ccG0Ghpp.s]
+        ignore line: [GNU C17 (xPack GNU Arm Embedded GCC x86_64) version 13.3.1 20240614 (arm-none-eabi)]
+        ignore line: [	compiled by GNU C version 13.2.0  GMP version 6.2.1  MPFR version 3.1.6  MPC version 1.0.3  isl version isl-0.15-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include"]
+        ignore line: [ignoring nonexistent directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/lib/gcc/arm-none-eabi/13.3.1/../../../../include"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: ec427ac1ab153ab88c25b6cc54f3861f]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/']
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv8-m.main+dsp+fp -mfloat-abi=softfp -meabi=5 -o CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj c:\\temp\\ccG0Ghpp.s]
+        ignore line: [GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (xPack GNU Arm Embedded GCC x86_64) 2.42.0.20240614]
+        ignore line: [COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.'\x0d]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse -Wl --build-id=none -nostdlib -v CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj -o cmTC_2a8eb.elf   && cd ."]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-gcc.exe]
+        ignore line: [COLLECT_LTO_WRAPPER=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) ]
+        ignore line: [COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_2a8eb.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_2a8eb.elf.']
+        link line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe -plugin C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll -plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe -plugin-opt=-fresolution=c:\\temp\\ccz0mV4j.res --sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -X -o cmTC_2a8eb.elf -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1 -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj\x0d]
+          arg [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll] ==> ignore
+          arg [-plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe] ==> ignore
+          arg [-plugin-opt=-fresolution=c:\\temp\\ccz0mV4j.res] ==> ignore
+          arg [--sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi] ==> ignore
+          arg [-X] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_2a8eb.elf] ==> ignore
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib]
+          arg [--build-id=none] ==> ignore
+          arg [CMakeFiles/cmTC_2a8eb.dir/CMakeCCompilerABI.c.obj] ==> ignore
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: cannot find entry symbol _start]
+        ignore line: [ defaulting to 00008000\x0d]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_2a8eb.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_2a8eb.elf.'\x0d]
+        ignore line: []
+        ignore line: []
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-s6238o"
+      binary: "C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-s6238o"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "-mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse"
+      CMAKE_CXX_FLAGS_DEBUG: "-Og -g"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "C:/Users/raduco3/pico-dev/pico-sdk/cmake"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-s6238o'
+        
+        Run Build Command(s): C:/mingw64/bin/ninja.exe -v cmTC_0fd56
+        [1/2] C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe   -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse    -v -o CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj -c C:/mingw64/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe
+        Target: arm-none-eabi
+        Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) 
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/cc1plus.exe -quiet -v -imultilib thumb/v8-m.main+fp/softfp -iprefix C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/ -isysroot C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -D__USES_INITFINI__ C:/mingw64/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_0fd56.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m33 -mthumb -mfloat-abi=softfp -mcmse -mlibarch=armv8-m.main+dsp+fp -march=armv8-m.main+dsp+fp -version -o c:\\temp\\cc8Ym86P.s
+        GNU C++17 (xPack GNU Arm Embedded GCC x86_64) version 13.3.1 20240614 (arm-none-eabi)
+        	compiled by GNU C version 13.2.0, GMP version 6.2.1, MPFR version 3.1.6, MPC version 1.0.3, isl version isl-0.15-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include"
+        ignoring nonexistent directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/lib/gcc/arm-none-eabi/13.3.1/../../../../include"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include"
+        ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+        End of search list.
+        Compiler executable checksum: 1a5e4d9fe96b5d78fa58c69128962504
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv8-m.main+dsp+fp -mfloat-abi=softfp -meabi=5 -o CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj c:\\temp\\cc8Ym86P.s
+        GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (xPack GNU Arm Embedded GCC x86_64) 2.42.0.20240614
+        COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.'\x0d
+        [2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse -Wl,--build-id=none -nostdlib -v CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj -o cmTC_0fd56.elf   && cd ."
+        Using built-in specs.
+        COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe
+        COLLECT_LTO_WRAPPER=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe
+        Target: arm-none-eabi
+        Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) 
+        COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_0fd56.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_0fd56.elf.'
+         C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe -plugin C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll -plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe -plugin-opt=-fresolution=c:\\temp\\ccralVjj.res --sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -X -o cmTC_0fd56.elf -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1 -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj\x0d
+        C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: cannot find entry symbol _start; defaulting to 00008000\x0d
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_0fd56.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_0fd56.elf.'\x0d
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        end of search list found
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1/backward]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include]
+        implicit include dirs: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include/c++/13.3.1/backward;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/include-fixed;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "C:/mingw64/share/cmake-3.30/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:12 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: 'C:/_GitProj/AE/VS_Code_AE_Workspace/VilsSharpX/VilsSharpX/firmware/pico2-lvds-bridge/build/CMakeFiles/CMakeScratch/TryCompile-s6238o']
+        ignore line: []
+        ignore line: [Run Build Command(s): C:/mingw64/bin/ninja.exe -v cmTC_0fd56]
+        ignore line: [[1/2] C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe   -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse    -v -o CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj -c C:/mingw64/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/']
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/cc1plus.exe -quiet -v -imultilib thumb/v8-m.main+fp/softfp -iprefix C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/ -isysroot C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -D__USES_INITFINI__ C:/mingw64/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_0fd56.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m33 -mthumb -mfloat-abi=softfp -mcmse -mlibarch=armv8-m.main+dsp+fp -march=armv8-m.main+dsp+fp -version -o c:\\temp\\cc8Ym86P.s]
+        ignore line: [GNU C++17 (xPack GNU Arm Embedded GCC x86_64) version 13.3.1 20240614 (arm-none-eabi)]
+        ignore line: [	compiled by GNU C version 13.2.0  GMP version 6.2.1  MPFR version 3.1.6  MPC version 1.0.3  isl version isl-0.15-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include"]
+        ignore line: [ignoring nonexistent directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/lib/gcc/arm-none-eabi/13.3.1/../../../../include"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include"]
+        ignore line: [ignoring duplicate directory "C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v8-m.main+fp/softfp]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: 1a5e4d9fe96b5d78fa58c69128962504]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/']
+        ignore line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv8-m.main+dsp+fp -mfloat-abi=softfp -meabi=5 -o CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj c:\\temp\\cc8Ym86P.s]
+        ignore line: [GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (xPack GNU Arm Embedded GCC x86_64) 2.42.0.20240614]
+        ignore line: [COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-v' '-o' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.'\x0d]
+        ignore line: [[2/2] C:\\Windows\\system32\\cmd.exe /C "cd . && C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe -mcpu=cortex-m33 -mthumb -march=armv8-m.main+fp+dsp -mfloat-abi=softfp -mcmse -Wl --build-id=none -nostdlib -v CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj -o cmTC_0fd56.elf   && cd ."]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=C:\\Users\\raduco3\\pico-dev\\arm-gnu-toolchain\\bin\\arm-none-eabi-g++.exe]
+        ignore line: [COLLECT_LTO_WRAPPER=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/sources/gcc/configure --prefix=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application --with-sysroot=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/application/arm-none-eabi --with-native-system-header-dir=/include --infodir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/info --mandir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/man --htmldir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/html --pdfdir=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install/share/pdf --build=x86_64-pc-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --disable-nls --disable-shared --disable-threads --disable-tls --enable-checking=release --enable-languages=c,c++ --enable-mingw-wildcard --with-gmp=/__w/arm-none-eabi-gcc-xpack/arm-none-eabi-gcc-xpack/build-assets/build/win32-x64/x86_64-w64-mingw32/install --with-newlib --with-pkgversion='xPack GNU Arm Embedded GCC x86_64' --with-gnu-as --with-gnu-ld --with-system-zlib --with-headers=yes --enable-multilib --with-multilib-list=aprofile,rmprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240614 (xPack GNU Arm Embedded GCC x86_64) ]
+        ignore line: [COMPILER_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_0fd56.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_0fd56.elf.']
+        link line: [ C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe -plugin C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll -plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe -plugin-opt=-fresolution=c:\\temp\\ccralVjj.res --sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi -X -o cmTC_0fd56.elf -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1 -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib -LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj\x0d]
+          arg [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/collect2.exe] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/liblto_plugin.dll] ==> ignore
+          arg [-plugin-opt=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../libexec/gcc/arm-none-eabi/13.3.1/lto-wrapper.exe] ==> ignore
+          arg [-plugin-opt=-fresolution=c:\\temp\\ccralVjj.res] ==> ignore
+          arg [--sysroot=C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi] ==> ignore
+          arg [-X] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_0fd56.elf] ==> ignore
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib]
+          arg [-LC:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib] ==> dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib]
+          arg [--build-id=none] ==> ignore
+          arg [CMakeFiles/cmTC_0fd56.dir/CMakeCXXCompilerABI.cpp.obj] ==> ignore
+        ignore line: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: cannot find entry symbol _start]
+        ignore line: [ defaulting to 00008000\x0d]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m33' '-mthumb'  '-mfloat-abi=softfp' '-mcmse' '-nostdlib' '-v' '-o' 'cmTC_0fd56.elf' '-mlibarch=armv8-m.main+dsp+fp' '-march=armv8-m.main+dsp+fp' '-dumpdir' 'cmTC_0fd56.elf.'\x0d]
+        ignore line: []
+        ignore line: []
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib/thumb/v8-m.main+fp/softfp] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        collapse library dir [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/bin/../arm-none-eabi/lib] ==> [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: [C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1/thumb/v8-m.main+fp/softfp;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib/thumb/v8-m.main+fp/softfp;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc/arm-none-eabi/13.3.1;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/lib/gcc;C:/Users/raduco3/pico-dev/arm-gnu-toolchain/arm-none-eabi/lib]
+        implicit fwks: []
+      
+      
+...
