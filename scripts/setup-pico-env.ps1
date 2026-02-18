@@ -5,7 +5,7 @@
 #>
 $ErrorActionPreference = "Stop"
 $proxy = "http://roshroproxy01v.hro.hella.com:3128"
-$curlProxy = "--proxy `"$proxy`" --proxy-ntlm -U :"
+//$curlProxy = "--proxy `"$proxy`" --proxy-ntlm -U :"
 
 $installBase = "$env:USERPROFILE\pico-dev"
 $armDir = "$installBase\arm-gnu-toolchain"
