@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
 
+# ── Target: Raspberry Pi Pico 2 (RP2350) ───────────────────────────
+# MUST be set before include(pico_sdk_import) and project()
+set(PICO_BOARD pico2 CACHE STRING "Target board")
+set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Target platform")
+
 # ── Pico SDK import (must come before project()) ────────────────────
 # Set PICO_SDK_PATH environment variable or pass -DPICO_SDK_PATH=...
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
@@ -8,9 +13,6 @@ project(pico2_lvds_bridge C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Target: Raspberry Pi Pico 2 (RP2350)
-set(PICO_BOARD pico2)
 
 pico_sdk_init()
 
