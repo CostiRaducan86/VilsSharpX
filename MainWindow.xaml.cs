@@ -1027,7 +1027,7 @@ namespace VilsSharpX
             SaveUiSettings();
         }
 
-        private void BtnLvdsStart_Click(object sender, RoutedEventArgs e)
+        private async void BtnLvdsStart_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(_lvdsPortHint))
             {
@@ -1035,10 +1035,18 @@ namespace VilsSharpX
                 return;
             }
 
+            // Disable buttons immediately to prevent double-clicks
+            BtnLvdsStart.IsEnabled = false;
+            BtnLvdsStop.IsEnabled = false;
+            LblLvdsStatus.Text = $"Opening {_lvdsPortHint}...";
+
             try
             {
-                _lvdsManager.StartCapture(_lvdsPortHint);
-                BtnLvdsStart.IsEnabled = false;
+                // Open the serial port on a background thread so the UI never freezes.
+                // SerialPort.Open() can hang indefinitely on USB CDC devices.
+                var port = _lvdsPortHint;
+                await System.Threading.Tasks.Task.Run(() => _lvdsManager.StartCapture(port));
+
                 BtnLvdsStop.IsEnabled = true;
                 BtnFirmwareStatus.IsEnabled = true; // Status works during capture (firmware pauses PIO)
                 LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — waiting for data...";
@@ -1048,6 +1056,7 @@ namespace VilsSharpX
             catch (Exception ex)
             {
                 LblLvdsStatus.Text = $"Error: {ex.Message}";
+                BtnLvdsStart.IsEnabled = true;
             }
         }
 
@@ -1355,7 +1364,7 @@ namespace VilsSharpX
 
         // ── Pico 2 Bootloader ──────────────────────────────────────────
 
-        private void BtnPicoBoot_Click(object sender, RoutedEventArgs e)
+        private async void BtnPicoBoot_Click(object sender, RoutedEventArgs e)
         {
             // Get the selected COM port
             string? portName = CmbLvdsPort.SelectedItem as string;
@@ -1381,14 +1390,14 @@ namespace VilsSharpX
                 // Stop simulation if running
                 if (_lvdsSimSource?.IsRunning == true) StopLvdsSimulation();
 
-                // Send bootloader command (handles both capturing and non-capturing states)
-                _lvdsManager.EnterBootloader(portName);
-
+                // Send bootloader command on background thread (SerialPort can hang)
                 BtnLvdsStart.IsEnabled = false;
                 BtnLvdsStop.IsEnabled = false;
                 BtnPicoBoot.IsEnabled = false;
-                LblLvdsStatus.Text = $"Pico 2 rebooting into bootloader... COM port will disconnect.";
+                LblLvdsStatus.Text = $"Sending bootloader command to {portName}...";
                 LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
+
+                await System.Threading.Tasks.Task.Run(() => _lvdsManager.EnterBootloader(portName));
 
                 AppendDiagLog($"[lvds] Pico 2 on {portName} sent to bootloader mode.");
 
