@@ -1,18 +1,18 @@
 /*
- * main.c - Frame-aware LVDS-to-USB-CDC bridge for Raspberry Pi Pico 2 (RP2350)
+ * main.c - Frame-aware LVDS-to-USB-vendor bridge for Raspberry Pi Pico 2 (RP2350)
  *
  * Architecture:
  *   LVDS -> NBA3N012C -> TTL -> GPIO2 -> PIO UART RX -> byte-DMA -> ring
- *   -> CPU line parser -> frame assembler -> USB CDC -> PC
+ *   -> CPU line parser -> frame assembler -> USB vendor -> PC
  *
  * Instead of blindly forwarding raw UART bytes to USB (which overflows
- * because UART rate > USB CDC throughput via RDP), the firmware parses
+ * because UART rate > USB vendor throughput via RDP), the firmware parses
  * the LVDS line protocol on-chip, assembles complete frames, and sends
  * cooked frame packets to the host.
  *
  * Frame skipping handles the bandwidth mismatch gracefully:
  *   UART input:  849 KB/s  (260 B/line x 68 lines x 48 FPS, Nichia)
- *   USB output:  ~500 KB/s (USB FS CDC through RDP)
+ *   USB output:  ~500 KB/s (USB FS vendor through RDP)
  *   Cooked frame: 16392 B  (8-byte header + 256x64 pixels)
  *   At 24 FPS:  393 KB/s   <- fits comfortably in USB budget
  *
@@ -25,14 +25,14 @@
  *   [height_lo] [height_hi]              - active height (LE)
  *   [width x height bytes of pixel data] - row-major, grayscale
  *
- * Protocol modes (selected by host command over CDC):
+ * Protocol modes (selected by host command over vendor):
  *   'N' = Nichia:  12,500,000 baud, 8N1, 8x oversampling, 256x64 active
  *   'O' = Osram:   20,000,000 baud, 8O1*, 4x oversampling, 320x80 active
  *
  * Hardware setup:
  *   - Pico 2 on gusmanb LogicAnalyzer level-shifting board
  *   - LVDS receiver (onsemi NBA3N012C) -> TTL -> Channel 1 (GPIO 2)
- *   - USB CDC virtual COM port to PC
+ *   - USB vendor virtual COM port to PC
  */
 
 #include <stdio.h>
@@ -209,17 +209,14 @@ int main(void)
 
     while (1)
     {
+        tud_task();
+        process_host_commands();
         parse_ring_data();
         send_frame_chunk();
-        tud_task();
-        send_frame_chunk();
-        tud_task();
+        update_led();
 
         if (dma_channel_hw_addr(dma_chan)->transfer_count == 0)
             dma_channel_set_trans_count(dma_chan, 0x0FFFFFFF, true);
-
-        process_host_commands();
-        update_led();
     }
     return 0;
 }
@@ -232,7 +229,8 @@ static void parse_ring_data(void)
 {
     uint32_t wr = get_dma_wr();
     uint32_t rd = ring_rd;
-    int budget = 8192;
+    int budget = 16384;
+    int tick = 0;
 
     while (rd != wr && budget-- > 0)
     {
@@ -306,6 +304,10 @@ static void parse_ring_data(void)
             }
             break;
         }
+
+        if ((++tick & 0x1FF) == 0) {
+        tud_task();
+        }
     }
 
     uint32_t fill = (wr >= rd) ? (wr - rd) : (RING_SIZE - rd + wr);
@@ -337,23 +339,28 @@ static void handle_complete_line(void)
      * false 0x5D match in gap data will have a random row number.
      * Only place pixels when row matches the expected sequence.
      * Frame start (prev_row == -1) always accepted. */
-    bool row_ok = (prev_row < 0) || (row == prev_row + 1);
     prev_row = row;
 
-    if (row_ok && row < proto->active_height) {
-        memcpy(asm_fb + row * proto->width,
-               line_data + 2, proto->width);
-        if (!line_placed[row]) {
-            line_placed[row] = true;
-            lines_placed++;
+    if (row < proto->lvds_height) {
+        if (row < proto->active_height) {
+            if (!line_placed[row]) {
+                memcpy(asm_fb + (row * proto->width), line_data + 2, proto->width);
+                line_placed[row] = true;
+                lines_placed++;
+            }
         }
-    } else if (!row_ok) {
+    } else {
+        // row invalid -> probable false sync / corruption
         row_seq_skip++;
     }
+
 }
 
 static void emit_assembled_frame(void)
 {
+    static uint32_t decim = 0;
+    if (++decim & 1) return; 
+
     fw_frame_id++;
 
     if (send_fb == NULL) {
@@ -392,22 +399,25 @@ static void emit_assembled_frame(void)
 static void send_frame_chunk(void)
 {
     if (send_fb == NULL) return;
-    if (!tud_cdc_connected()) { send_fb = NULL; return; }
+    if (!tud_connected()) { send_fb = NULL; return; }
 
-    for (int pass = 0; pass < 4; pass++)
+    bool progressed = false;
+
+    for (int pass = 0; pass < 16; pass++)
     {
-        uint32_t avail = tud_cdc_write_available();
-        if (avail == 0) break;
+        uint32_t avail = tud_vendor_write_available();
+        if (avail < 64) break; // sub un packet, nu forța
 
         if (send_offset < FRAME_HDR_SIZE) {
             uint32_t rem = FRAME_HDR_SIZE - send_offset;
             uint32_t chunk = (avail < rem) ? avail : rem;
-            uint32_t w = tud_cdc_write(send_hdr + send_offset, chunk);
+            uint32_t w = tud_vendor_write(send_hdr + send_offset, chunk);
+            if (w == 0) break;
             send_offset += w;
             total_usb_bytes += w;
-            if (w < chunk) break;
+            progressed = true;
             avail -= w;
-            if (avail == 0) break;
+            if (w < chunk || avail < 64) break;
         }
 
         uint32_t pix_off   = send_offset - FRAME_HDR_SIZE;
@@ -415,19 +425,26 @@ static void send_frame_chunk(void)
         if (pix_off < pix_total) {
             uint32_t rem = pix_total - pix_off;
             uint32_t chunk = (avail < rem) ? avail : rem;
-            uint32_t w = tud_cdc_write(send_fb + pix_off, chunk);
+            uint32_t w = tud_vendor_write(send_fb + pix_off, chunk);
+            if (w == 0) break;
             send_offset += w;
             total_usb_bytes += w;
+            progressed = true;
             if (w < chunk) break;
         }
 
         if (send_offset >= send_total) {
+            // flush o singură dată pe frame complet
+            tud_vendor_write_flush();
             send_fb = NULL;
-            break;
+            return;
         }
     }
-    tud_cdc_write_flush();
+
+    // flush doar dacă am scris ceva
+    if (progressed) tud_vendor_write_flush();
 }
+
 
 /* ================================================================= */
 /*  DMA: byte-width from PIO FIFO byte 3                             */
@@ -526,9 +543,9 @@ static void reset_frame_state(void)
 
 static void process_host_commands(void)
 {
-    if (!tud_cdc_available()) return;
+    if (!tud_vendor_available()) return;
     uint8_t cmd;
-    if (tud_cdc_read(&cmd, 1) != 1) return;
+    if (tud_vendor_read(&cmd, 1) != 1) return;
 
     switch (cmd)
     {
@@ -549,10 +566,10 @@ static void process_host_commands(void)
         ring_rd = 0;
         if (send_fb) { send_fb = NULL; send_offset = 0; }
 
-        tud_cdc_write_flush();
+        tud_vendor_write_flush();
         for (int d = 0; d < 100; d++) {
             tud_task();
-            if (tud_cdc_write_available() >= 256) break;
+            if (tud_vendor_write_available() >= 256) break;
             sleep_us(200);
         }
 
@@ -565,8 +582,8 @@ static void process_host_commands(void)
             crc_ok_lines, crc_errors, row_seq_skip,
             gap_bytes_total, gap_resyncs,
             max_fill, RING_SIZE);
-        tud_cdc_write(status, len);
-        tud_cdc_write_flush();
+        tud_vendor_write(status, len);
+        tud_vendor_write_flush();
 
         for (int d = 0; d < 50; d++) {
             tud_task();
@@ -594,8 +611,8 @@ static void process_host_commands(void)
 
     case 'B': case 'b':
         stop_dma();
-        tud_cdc_write_str("BOOT\n");
-        tud_cdc_write_flush();
+        tud_vendor_write("BOOT\n", 5);
+        tud_vendor_write_flush();
         sleep_ms(50);
         reset_usb_boot(0, 0);
         break;
@@ -611,7 +628,7 @@ static void process_host_commands(void)
 static void update_led(void)
 {
     uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (!tud_cdc_connected()) { gpio_put(LED_PIN, 0); return; }
+    if (!tud_connected()) { gpio_put(LED_PIN, 0); return; }
     if (frames_sent > 0) {
         gpio_put(LED_PIN, 1);
     } else if (now - last_led_time >= 250) {
@@ -625,13 +642,15 @@ static void update_led(void)
 /*  TinyUSB callbacks                                                 */
 /* ================================================================= */
 
-void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts)
+/*
+void tud_vendor_line_state_cb(uint8_t itf, bool dtr, bool rts)
 {
     (void)itf; (void)rts;
     if (dtr) { total_usb_bytes = 0; frames_sent = 0; frames_dropped = 0; }
 }
 
-void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const *p_line_coding)
+void tud_vendor_line_coding_cb(uint8_t itf, vendor_line_coding_t const *p_line_coding)
 {
     (void)itf; (void)p_line_coding;
 }
+*/

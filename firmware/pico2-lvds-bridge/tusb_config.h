@@ -20,11 +20,11 @@ extern "C" {
 #define CFG_TUSB_RHPORT0_MODE  OPT_MODE_DEVICE
 
 /* ── Device class ────────────────────────────────────────────────── */
-#define CFG_TUD_CDC            1
+#define CFG_TUD_CDC            0
 #define CFG_TUD_MSC            0
 #define CFG_TUD_HID            0
 #define CFG_TUD_MIDI           0
-#define CFG_TUD_VENDOR         0
+#define CFG_TUD_VENDOR         1
 
 /* ── CDC buffer sizes ────────────────────────────────────────────── */
 /*
@@ -39,11 +39,26 @@ extern "C" {
  * TX buffer = 8192 bytes → ~9.6 ms of buffering at 849 KB/s.
  * Combined with DMA ring (6.5 ms), total buffering ≈ 16 ms.
  */
-#define CFG_TUD_CDC_RX_BUFSIZE   512    /* host → device (commands) */
-#define CFG_TUD_CDC_TX_BUFSIZE   8192   /* device → host (UART data) */
+//#define CFG_TUD_CDC_RX_BUFSIZE   512    /* host → device (commands) */
+//#define CFG_TUD_CDC_TX_BUFSIZE   8192   /* device → host (UART data) */
 
 /* ── Endpoint sizes ──────────────────────────────────────────────── */
-#define CFG_TUD_CDC_EP_BUFSIZE   64     /* USB Full Speed bulk EP */
+//#define CFG_TUD_CDC_EP_BUFSIZE   64     /* USB Full Speed bulk EP */
+
+
+/* ── Vendor buffer sizes ─────────────────────────────────────────── */
+/* FS bulk max packet = 64 bytes.                                     */
+#ifndef CFG_TUD_VENDOR_RX_BUFSIZE
+#define CFG_TUD_VENDOR_RX_BUFSIZE  512     /* host → device (commands) */
+#endif
+#ifndef CFG_TUD_VENDOR_TX_BUFSIZE
+#define CFG_TUD_VENDOR_TX_BUFSIZE  8192    /* device → host (stream) */
+#endif
+
+/* ── Endpoint sizes ──────────────────────────────────────────────── */
+#ifndef CFG_TUD_VENDOR_EPSIZE
+#define CFG_TUD_VENDOR_EPSIZE      64
+#endif
 
 #ifdef __cplusplus
 }
