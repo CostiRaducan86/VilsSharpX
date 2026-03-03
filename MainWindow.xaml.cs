@@ -153,6 +153,19 @@ namespace VilsSharpX
 
         private readonly object _frameLock = new();
 
+        // ─── Frame synchronization for diff comparison ─────────────────────
+        // Ring buffer of recently produced A frames.  When B arrives from LVDS
+        // with ECU round-trip delay, we find the A frame that was originally
+        // sent and use it for a correct diff comparison.
+        private const int SyncRingSize = 128;
+        private readonly Frame?[] _syncRing = new Frame?[SyncRingSize];
+        private volatile int _syncRingHead;
+        /// <summary>
+        /// The A frame that best matches the current _latestB for diff.
+        /// Updated each time a new LVDS B frame arrives via HandleLvdsFrameReady.
+        /// </summary>
+        private Frame? _matchedAForDiff;
+
         // Zoom/pan manager (replaces individual _zoom/_pan fields)
         private readonly ZoomPanManager _zoomPan = new();
 
@@ -306,6 +319,7 @@ namespace VilsSharpX
                 _pausedB = null;
                 _pausedD = null;
             }
+            ResetSyncState();
 
             RenderNoSignalFrames();
         }
@@ -758,6 +772,7 @@ namespace VilsSharpX
                     {
                         _latestA = aLive;
                     }
+                    PushSyncFrame(aLive);
                 }
                 catch
                 {
@@ -1026,13 +1041,10 @@ namespace VilsSharpX
                 _nichiaEthCapture.OnFrameReady += (frame, meta) =>
                     Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
 
-                if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = $"Ethernet: capturing (ethertype 0x88B5)";
-                LblLvdsStatus.Text = "Nichia Ethernet capture active — waiting for frames...";
                 AppendDiagLog("[nfe] Nichia Ethernet capture started");
             }
             catch (Exception ex)
             {
-                if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = $"Ethernet: error — {ex.Message}";
                 AppendDiagLog($"[nfe] Ethernet capture error: {ex.Message}");
             }
         }
@@ -1059,23 +1071,24 @@ namespace VilsSharpX
             // Update LVDS stats labels
             LblLvdsFrameCount.Text = $"Frames: {meta.FrameId} ({meta.ValidLines}/{meta.LinesExpected} lines)";
             LblLvdsBytesReceived.Text = $"Bytes: {meta.TotalBytes:N0}";
-            LblLvdsSyncLoss.Text = $"Sync: {meta.SyncLosses}  CRC: {meta.CrcErrors}  Parity: {meta.ParityErrors}";
+            LblLvdsSyncLoss.Text = $"Sync_error: {meta.SyncLosses}  CRC_error: {meta.CrcErrors}  Parity_error: {meta.ParityErrors}";
 
             // FPS from Ethernet capture
             double fps = _nichiaEthCapture?.FpsEma ?? 0;
             LblLvdsFps.Text = $"FPS: {fps:F1}";
 
-            // Status text
-            if (DateTime.UtcNow > _statusOverrideUntil)
-            {
-                LblLvdsStatus.Text = $"Capturing on Ethernet — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
-            }
+            // Status text is now shown only in Frame Statistics, no need to duplicate here
 
             // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
             {
                 _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
             }
+
+            // Find best-matching A frame for synchronized diff comparison.
+            // B arrives with ECU round-trip delay; pixel-sampling picks the A
+            // that was originally sent and passed through the ECU.
+            _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
 
             // When the main playback loop is NOT running (user didn't press Start),
             // render LVDS frame directly on pane B (standalone LVDS capture mode).
@@ -1136,7 +1149,7 @@ namespace VilsSharpX
             LblLvdsProtocol.Text = $"Protocol: {_currentDeviceType.GetDisplayName()}\n" +
                                    $"Baud: {cfg.BaudRate:N0} bps | {cfg.DataBits}{parityStr}1 | LSB-first\n" +
                                    $"Line: [0x5D][row][{cfg.FrameWidth}px][CRC{cfg.CrcLen*8}] = {cfg.LinePacketLen} B\n" +
-                                   $"Frame: {cfg.FrameHeight} lines → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
+                                   $"Frame: {cfg.ActiveHeight} lines → rezolution {cfg.FrameWidth}×{cfg.ActiveHeight}";
         }
 
         /// <summary>
@@ -1804,6 +1817,7 @@ namespace VilsSharpX
                 _pausedB = null;
                 _pausedD = null;
             }
+            ResetSyncState();
 
             StopRenderLoops();
 
@@ -1814,7 +1828,6 @@ namespace VilsSharpX
             // Stop all live capture sources
             _liveCapture.StopAll();
             StopNichiaEthCapture();
-            if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = "Ethernet: idle";
 
             // Ensure we don't remain paused after stopping.
             _playback.PauseGate.Set();
@@ -2052,6 +2065,7 @@ namespace VilsSharpX
                 var aBytes = GetASourceBytes();
                 var a = new Frame(_currentWidth, _currentHeight, aBytes, DateTime.UtcNow);
                 _playback.IncrementCountA();
+                PushSyncFrame(a);
         
                 // B: prefer real Nichia Ethernet LVDS when available; otherwise simulated LVDS (A + delta)
                 Frame b;
@@ -2086,8 +2100,10 @@ namespace VilsSharpX
                 if (!useRealEthB)
                     _playback.IncrementCountB();
         
-                // D: diff
-                var d = AbsDiff(a, b);
+                // D: diff — use frame-matched A when real ETH B is active
+                var genMatchedA = _matchedAForDiff; // snapshot for thread safety
+                Frame diffA = (useRealEthB && genMatchedA != null) ? genMatchedA : a;
+                var d = AbsDiff(diffA, b);
         
                 // -----------------------------
                 // AVTP Ethernet TX (ONLY PlayerFromFiles)
@@ -2235,13 +2251,17 @@ namespace VilsSharpX
             // In AVTP Live mode:
             //   - If LVDS capture is active and has a frame, use the real LVDS data for B
             //   - Otherwise, derive B from A using the UI delta (mock LVDS)
+            // Snapshot the matched-A reference ONCE to avoid race with HandleLvdsFrameReady.
+            var matchedA = _matchedAForDiff;
+            bool hasRealEthB = false;
+
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
-                bool ethHasFrame = _nichiaEthCapture != null
-                                   && _nichiaEthCapture.IsCapturing
-                                   && _nichiaEthCapture.FramesCompleted > 0;
+                hasRealEthB = _nichiaEthCapture != null
+                              && _nichiaEthCapture.IsCapturing
+                              && _nichiaEthCapture.FramesCompleted > 0;
 
-                if (ethHasFrame)
+                if (hasRealEthB)
                 {
                     // B already comes from HandleLvdsFrameReady() via _latestB.
                     // Keep current b from frame cache (do not overwrite with mock data).
@@ -2257,15 +2277,18 @@ namespace VilsSharpX
                     // Fallback: mock LVDS (A + delta)
                     b = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(a.Data, _bValueDelta), a.TimestampUtc);
                 }
-                d = AbsDiff(a, b);
             }
 
             // B post-processing (forced dead pixel + optional compensation)
             b = ApplyBPostProcessing(a, b);
 
+            // For diff rendering, use the matched A frame (sync-corrected) when ETH B is active,
+            // so the comparison reflects actual ECU processing differences, not animation timing.
+            byte[] diffARef = (hasRealEthB && matchedA != null) ? matchedA.Data : a.Data;
+
             BitmapUtils.Blit(_wbA, a.Data, a.Stride);
             BitmapUtils.Blit(_wbB, b.Data, b.Stride);
-            DiffRenderer.RenderCompareToBgr(_diffBgr, a.Data, b.Data, _currentWidth, _currentHeight, _diffThreshold,
+            DiffRenderer.RenderCompareToBgr(_diffBgr, diffARef, b.Data, _currentWidth, _currentHeight, _diffThreshold,
                 _zeroZeroIsWhite,
                 out var minDiff, out var maxDiff, out var meanDiff,
                 out var maxAbsDiff, out var meanAbsDiff, out var aboveDeadband,
@@ -2360,6 +2383,58 @@ namespace VilsSharpX
 
         private Frame AbsDiff(Frame a, Frame b) => ImageUtils.AbsDiff(a, b, _currentWidth, _currentHeight);
         private static byte[] ApplyValueDelta(byte[] src, int delta) => ImageUtils.ApplyValueDelta(src, delta);
+
+        // ─── Frame synchronization helpers ──────────────────────────────────
+
+        /// <summary>
+        /// Stores an A frame in the sync ring buffer for later matching with B frames.
+        /// </summary>
+        private void PushSyncFrame(Frame a)
+        {
+            int idx = Interlocked.Increment(ref _syncRingHead) & (SyncRingSize - 1);
+            _syncRing[idx] = a;
+        }
+
+        /// <summary>
+        /// Finds the A frame in the sync ring buffer that best matches the given
+        /// B frame pixel data.  Compares ALL pixels for reliable matching even
+        /// with smooth animations (e.g. sweeping bar).  Cost: ~3.3 M byte-ops
+        /// per call at 320×80 × 128 entries — sub-millisecond on modern CPUs.
+        /// </summary>
+        private Frame? FindBestMatchA(byte[] bData, int expectedLen)
+        {
+            if (expectedLen == 0) return null;
+            Frame? best = null;
+            long bestScore = long.MaxValue;
+
+            for (int i = 0; i < SyncRingSize; i++)
+            {
+                var f = _syncRing[i];
+                if (f == null || f.Data.Length != expectedLen) continue;
+
+                long score = 0;
+                var aData = f.Data;
+                for (int j = 0; j < expectedLen; j++)
+                    score += Math.Abs(bData[j] - aData[j]);
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = f;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Resets the frame synchronization state (call on Start/Stop).
+        /// </summary>
+        private void ResetSyncState()
+        {
+            Array.Clear(_syncRing);
+            _syncRingHead = 0;
+            _matchedAForDiff = null;
+        }
 
         private void ImgA_MouseMove(object sender, MouseEventArgs e) => ShowPixelInfo(e, GetDisplayedFrameForPane(Pane.A), LblA);
         private void ImgB_MouseMove(object sender, MouseEventArgs e) => ShowPixelInfo(e, GetDisplayedFrameForPane(Pane.B), LblB);

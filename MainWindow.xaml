@@ -364,27 +364,27 @@
             </Grid>
         </Border>
 
-        <!-- Right side: LVDS Capture (Pane B) -->
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" BorderBrush="#ABADB3" BorderThickness="1" CornerRadius="8" Margin="4" Padding="6" Background="#F0F0F0">
-            <GroupBox Header="LVDS Capture (Pane B)" Padding="8">
+        <!-- Right side top: CAN/UART (aligned to A + B/D height) -->
+        <GroupBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Header="CAN/UART Monitor" Padding="8" Margin="4" Background="#F0F0F0">
+            <TextBlock Text="CAN/UART monitoring planned for future implementation."
+                       TextWrapping="Wrap" Foreground="LightGray" FontStyle="Italic"/>
+        </GroupBox>
+
+        <!-- Right side bottom: LVDS Info + Status (fills configuration/settings height) -->
+        <Grid Grid.Row="2" Grid.Column="2" Margin="4,4,4,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*"/>
+                <RowDefinition Height="2*"/>
+            </Grid.RowDefinitions>
+
+            <!-- LVDS Info -->
+            <GroupBox Grid.Row="0" Header="LVDS Info" Padding="8" Margin="0,0,0,8" Background="#F0F0F0">
                 <StackPanel Orientation="Vertical">
-                    <!-- Ethernet capture status -->
-                    <TextBlock x:Name="LblNichiaEthStatus" Foreground="DimGray"
-                               Text="Ethernet: idle" Margin="0,0,0,4"/>
-
-                    <!-- Separator -->
-                    <Rectangle Height="1" Fill="Gray" Margin="0,4,0,8" HorizontalAlignment="Stretch"/>
-
-                    <!-- LVDS Info -->
-                    <TextBlock Text="LVDS Info" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                    <TextBlock x:Name="LblLvdsStatus" TextWrapping="Wrap" Foreground="DimGray"
-                               Text=""/>
-
                     <!-- LVDS Protocol details (auto-detected from LSM device type) -->
-                    <TextBlock x:Name="LblLvdsProtocol" TextWrapping="Wrap" Foreground="DimGray" Margin="0,8,0,0"
+                    <TextBlock x:Name="LblLvdsProtocol" TextWrapping="Wrap" Foreground="DimGray" Margin="0,0,0,0"
                                Text=""/>
 
-                    <!-- Separator -->
+                    <!-- Separator (LVDS information) -->
                     <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
 
                     <!-- Frame Statistics -->
@@ -393,26 +393,23 @@
                     <TextBlock x:Name="LblLvdsBytesReceived" Text="Bytes: 0" Foreground="DimGray"/>
                     <TextBlock x:Name="LblLvdsSyncLoss" Text="Sync losses: 0" Foreground="DimGray"/>
                     <TextBlock x:Name="LblLvdsFps" Text="FPS: --" Foreground="DimGray"/>
-
-                    <!-- Separator -->
-                    <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
-
-                    <!-- Diagnostics -->
-                    <TextBlock Text="Diagnostics" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                    <TextBlock x:Name="LblCrcSelfTest" TextWrapping="Wrap" Foreground="DimGray"
-                               FontFamily="Consolas" FontSize="10.5"
-                               Text=""/>
-
-                    <!-- Separator -->
-                    <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
-
-                    <!-- CAN/UART placeholder (future) -->
-                    <TextBlock Text="CAN/UART Monitor" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                    <TextBlock Text="CAN/UART monitoring planned for future implementation."
-                               TextWrapping="Wrap" Foreground="LightGray" FontStyle="Italic"/>
                 </StackPanel>
             </GroupBox>
-        </Border>
+
+            <!-- Status -->
+            <GroupBox Grid.Row="1" Header="Status" Padding="8" Background="#F0F0F0">
+                <StackPanel Orientation="Vertical">
+                    <TextBlock x:Name="LblStatus" TextWrapping="Wrap" Foreground="DimGray"/>
+                    <TextBlock x:Name="LblDiffStats" TextWrapping="Wrap" Margin="0,4,0,0" Foreground="DimGray" />
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0" Visibility="Collapsed">
+                        <TextBlock Text="AVTP in:" Margin="0,0,6,0" />
+                        <TextBlock x:Name="LblAvtpInFps" Margin="0,0,16,0" />
+                        <TextBlock Text="Dropped:" Margin="0,0,6,0" />
+                        <TextBlock x:Name="LblAvtpDropped" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+        </Grid>
 
         <!-- Controls / Status -->
         <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="4,10,4,0">
@@ -646,20 +643,5 @@
 
         </Grid>
 
-        <!-- Right side: AVTP Status (aligned with config groups row) -->
-        <Border Grid.Row="2" Grid.Column="2" BorderBrush="#ABADB3" BorderThickness="1" CornerRadius="8" Margin="4,10,4,4" Padding="6" Background="#F0F0F0">
-            <GroupBox Header="Status" Padding="8">
-                <StackPanel Orientation="Vertical">
-                    <TextBlock x:Name="LblStatus" TextWrapping="Wrap" />
-                    <TextBlock x:Name="LblDiffStats" TextWrapping="Wrap" Margin="0,4,0,0" />
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0" Visibility="Collapsed">
-                        <TextBlock Text="AVTP in:" Margin="0,0,6,0" />
-                        <TextBlock x:Name="LblAvtpInFps" Margin="0,0,16,0" />
-                        <TextBlock Text="Dropped:" Margin="0,0,6,0" />
-                        <TextBlock x:Name="LblAvtpDropped" />
-                    </StackPanel>
-                </StackPanel>
-            </GroupBox>
-        </Border>
     </Grid>
 </Window>
