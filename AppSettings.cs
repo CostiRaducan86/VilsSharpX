@@ -6,7 +6,7 @@ namespace VilsSharpX;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsVersion = 8;
+    public const int CurrentSettingsVersion = 9;
 
     public int SettingsVersion { get; set; } = CurrentSettingsVersion;
 
@@ -45,6 +45,9 @@ public sealed class AppSettings
 
     // LVDS serial capture (Pico 2 board via USB CDC COM port)
     public string? LvdsPortHint { get; set; } = null;
+
+    // LVDS Mode (0 = Monitoring, 1 = Generator)
+    public int LvdsMode { get; set; } = 0;
 }
 
 public static class AppSettingsStore
@@ -125,6 +128,14 @@ public static class AppSettingsStore
                 // Migration: add LVDS serial capture port hint.
                 settings.LvdsPortHint = null;
                 settings.SettingsVersion = 8;
+                migrated = true;
+            }
+
+            if (settings.SettingsVersion < 9)
+            {
+                // Migration: add LVDS Mode (default Monitoring).
+                settings.LvdsMode = 0;
+                settings.SettingsVersion = 9;
                 migrated = true;
             }
 

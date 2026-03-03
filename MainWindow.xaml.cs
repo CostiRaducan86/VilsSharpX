@@ -136,10 +136,11 @@ namespace VilsSharpX
         // Live NIC selector
         private readonly LiveNicSelector _nicSelector = new();
 
-        // LVDS serial capture (Pico 2 board)
+        // LVDS capture manager
         private LvdsLiveManager _lvdsManager = null!;
-        private string? _lvdsPortHint;
-        private LvdsSimulatedSource? _lvdsSimSource;
+
+        // Nichia Ethernet capture (Aurix GETH → raw ethertype 0x88B5)
+        private NichiaEthCapture? _nichiaEthCapture;
 
         private Frame? _latestA;
         private Frame? _latestB;
@@ -165,8 +166,6 @@ namespace VilsSharpX
         private readonly DispatcherTimer _overlayTimerB;
         private readonly DispatcherTimer _overlayTimerD;
 
-        // Periodic timer for LVDS stats refresh (shows byte counter even without complete frames)
-        private DispatcherTimer? _lvdsStatsTimer;
         private DateTime _statusOverrideUntil = DateTime.MinValue;
 
         private bool _overlayPendingA;
@@ -274,19 +273,16 @@ namespace VilsSharpX
             // This prevents stale resources (pcap devices, sockets, files) from causing issues.
             try { _txManager?.Dispose(); } catch { /* ignore */ }
             try { _liveCapture?.Dispose(); } catch { /* ignore */ }
-            try { _lvdsSimSource?.Dispose(); _lvdsSimSource = null; } catch { /* ignore */ }
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
+            try { StopNichiaEthCapture(); } catch { /* ignore */ }
             try { _aviPlayer?.Dispose(); } catch { /* ignore */ }
-
-            // Reset LVDS test button state
-            if (BtnLvdsTest != null) BtnLvdsTest.Content = "Test";
 
             InitializeResolutionDependentObjects();
             InitializeDefaultPatterns();
 
             // Re-subscribe to LiveCaptureManager events (since we recreated the instance)
             if (_liveCapture != null)
-                _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
+                _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(frame, meta));
 
             // Re-subscribe to LVDS manager events
             if (_lvdsManager != null)
@@ -336,6 +332,14 @@ namespace VilsSharpX
             if (_playback.Cts == null) return false;
             if (!_playback.IsRunning) return false;
             if (_modeOfOperation != ModeOfOperation.AvtpLiveMonitor) return false;
+
+            // If Nichia Ethernet capture is active and already has frames,
+            // pane B is valid — proceed with rendering even if AVTP (pane A)
+            // hasn't arrived yet.  Pane A will show gray; B and D render normally.
+            if (_nichiaEthCapture != null
+                && _nichiaEthCapture.IsCapturing
+                && _nichiaEthCapture.FramesCompleted > 0)
+                return false;
 
             // In AVTP Live mode, keep panes in "Signal not available" until first valid frame arrives.
             return !_liveCapture.HasAvtpFrame;
@@ -715,7 +719,7 @@ namespace VilsSharpX
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             // Hook LiveCaptureManager -> update UI with frame info (frame storage is already done in the manager)
-            _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(meta));
+            _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(frame, meta));
 
             ShowIdleGradient();
             int w = GetCurrentWidth();
@@ -730,22 +734,36 @@ namespace VilsSharpX
             // Wire up LVDS manager frame ready event
             _lvdsManager.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
 
-            // Populate COM port list and LVDS protocol info
-            RefreshLvdsPortList();
             UpdateLvdsProtocolLabel();
-
-            // Auto-run CRC self-test at startup and log results
-            RunStartupCrcSelfTest();
 
             // Default button states: Load Files + Start enabled; others disabled
             ApplyButtonStates(false);
         }
 
-        private void HandleLiveFrameReady(FrameMeta meta)
+        private void HandleLiveFrameReady(byte[] frame, FrameMeta meta)
         {
             // Keep status stable when stopped; ignore late frames during shutdown races.
             if (!_playback.IsRunning)
                 return;
+
+            // Keep latest A frame in sync with the live AVTP callback frame so RenderAll
+            // always uses fresh AVTP content in pane A.
+            if (frame != null && frame.Length == _currentWidth * _currentHeight)
+            {
+                try
+                {
+                    var aLive = new Frame(_currentWidth, _currentHeight, frame,
+                        _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
+                    lock (_frameLock)
+                    {
+                        _latestA = aLive;
+                    }
+                }
+                catch
+                {
+                    // ignore frame copy issues in callback path
+                }
+            }
 
             _playback.IncrementCountAvtpIn();
 
@@ -849,19 +867,19 @@ namespace VilsSharpX
                     CmbEcuVariant.SelectedIndex = _ecuVariant;
                 }
 
+                if (CmbLvdsMode != null)
+                {
+                    CmbLvdsMode.SelectedIndex = Math.Clamp(s.LvdsMode, 0, 1);
+                }
+
                 if (TxtVlanId != null) TxtVlanId.Text = _vlanId.ToString();
                 if (TxtVlanPriority != null) TxtVlanPriority.Text = _vlanPriority.ToString();
                 if (TxtAvtpEtherType != null) TxtAvtpEtherType.Text = _avtpEtherType;
                 if (TxtStreamIdLastByte != null) TxtStreamIdLastByte.Text = _streamIdLastByte;
 
-                // LVDS port hint
-                _lvdsPortHint = s.LvdsPortHint;
-
                 RefreshLiveNicList();
                 UpdateLiveUiEnabledState();
 
-                // Refresh LVDS COM port list (after loading settings)
-                RefreshLvdsPortList();
                 UpdateLvdsProtocolLabel();
 
                 RenderAll();
@@ -886,7 +904,7 @@ namespace VilsSharpX
                 _avtpLiveEnabled, _avtpLiveDeviceHint, (int)_modeOfOperation,
                 _srcMac, _dstMac, (int)_currentDeviceType,
                 _ecuVariant, _vlanId, _vlanPriority, _avtpEtherType, _streamIdLastByte,
-                _lvdsPortHint);
+                null, CmbLvdsMode?.SelectedIndex ?? 0);
             _settingsManager.TrySave(s);
         }
 
@@ -920,8 +938,8 @@ namespace VilsSharpX
             ApplyButtonStates(isRunning: false);
 
             LblStatus.Text = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor
-                ? "Mode: AVTP Live (Monitoring). Press Start to listen/capture live stream."
-                : "Mode: Generator/Player (Files). Load a file and press Start.";
+                ? "Mode: AVTP Monitoring. Press Start to listen/capture live stream."
+                : "Mode: AVTP Generator. Load a file and press Start.";
         }
 
         private void CmbLsmDeviceType_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -955,6 +973,13 @@ namespace VilsSharpX
             SaveUiSettings();
         }
 
+        private void CmbLvdsMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_settingsManager.IsLoading || !IsLoaded) return;
+            // LVDS Mode: 0 = Monitoring (current behavior), 1 = Generator (future)
+            SaveUiSettings();
+        }
+
         private void TxtAvtpHeader_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             if (_settingsManager.IsLoading || !IsLoaded) return;
@@ -984,115 +1009,67 @@ namespace VilsSharpX
 
         private void BtnRefreshNics_Click(object sender, RoutedEventArgs e) => RefreshLiveNicList();
 
-        // ── LVDS Serial Capture (Pane B) ────────────────────────────────────
+        // ── Nichia Ethernet Capture (Aurix GETH → pane B) ──────────────
 
-        private void RefreshLvdsPortList()
+        private void StartNichiaEthCapture()
         {
-            if (CmbLvdsPort == null) return;
-
-            CmbLvdsPort.Items.Clear();
-            CmbLvdsPort.Items.Add("<None>");
-
-            // Deduplicate port names (Windows can report the same port twice via stale registry entries)
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var port in LvdsLiveManager.ListPorts())
-            {
-                if (seen.Add(port))
-                    CmbLvdsPort.Items.Add(port);
-            }
-
-            // Try to restore last selection
-            int idx = 0;
-            if (!string.IsNullOrWhiteSpace(_lvdsPortHint))
-            {
-                for (int i = 1; i < CmbLvdsPort.Items.Count; i++)
-                {
-                    if (string.Equals(CmbLvdsPort.Items[i] as string, _lvdsPortHint, StringComparison.OrdinalIgnoreCase))
-                    {
-                        idx = i;
-                        break;
-                    }
-                }
-            }
-            CmbLvdsPort.SelectedIndex = idx;
-        }
-
-        private void BtnRefreshLvdsPorts_Click(object sender, RoutedEventArgs e) => RefreshLvdsPortList();
-
-        private void CmbLvdsPort_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (_settingsManager.IsLoading) return;
-            var sel = CmbLvdsPort?.SelectedItem as string;
-            _lvdsPortHint = (sel != null && sel != "<None>") ? sel : null;
-            SaveUiSettings();
-        }
-
-        private async void BtnLvdsStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(_lvdsPortHint))
-            {
-                LblLvdsStatus.Text = "Select a COM port first.";
-                return;
-            }
-
-            // Disable buttons immediately to prevent double-clicks
-            BtnLvdsStart.IsEnabled = false;
-            BtnLvdsStop.IsEnabled = false;
-            LblLvdsStatus.Text = $"Opening {_lvdsPortHint}...";
-
             try
             {
-                // Open the serial port on a background thread so the UI never freezes.
-                // SerialPort.Open() can hang indefinitely on USB CDC devices.
-                var port = _lvdsPortHint;
-                await System.Threading.Tasks.Task.Run(() => _lvdsManager.StartCapture(port));
+                // If already capturing via Ethernet, stop first
+                StopNichiaEthCapture();
 
-                BtnLvdsStop.IsEnabled = true;
-                BtnFirmwareStatus.IsEnabled = true; // Status works during capture (firmware pauses PIO)
-                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — waiting for data...";
-                UpdateLvdsProtocolLabel();
-                StartLvdsStatsTimer();
+                // Use the same NIC as the AVTP live capture (pane A);
+                // the user can change the NIC via the existing NIC dropdown.
+                string? nicHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
+
+                _nichiaEthCapture = NichiaEthCapture.Start(nicHint, AppendDiagLog);
+                _nichiaEthCapture.OnFrameReady += (frame, meta) =>
+                    Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+
+                if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = $"Ethernet: capturing (ethertype 0x88B5)";
+                LblLvdsStatus.Text = "Nichia Ethernet capture active — waiting for frames...";
+                AppendDiagLog("[nfe] Nichia Ethernet capture started");
             }
             catch (Exception ex)
             {
-                LblLvdsStatus.Text = $"Error: {ex.Message}";
-                BtnLvdsStart.IsEnabled = true;
+                if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = $"Ethernet: error — {ex.Message}";
+                AppendDiagLog($"[nfe] Ethernet capture error: {ex.Message}");
             }
         }
 
-        private void BtnLvdsStop_Click(object sender, RoutedEventArgs e)
+        private void StopNichiaEthCapture()
         {
-            StopLvdsStatsTimer();
-            _lvdsManager.StopCapture();
-            BtnLvdsStart.IsEnabled = true;
-            BtnLvdsStop.IsEnabled = false;
-            BtnFirmwareStatus.IsEnabled = true;
-            LblLvdsStatus.Text = "Stopped.";
-            LblLvdsFrameCount.Text = "Frames: 0";
-            LblLvdsBytesReceived.Text = "Bytes: 0";
-            LblLvdsSyncLoss.Text = "Sync losses: 0";
-            LblLvdsFps.Text = "FPS: --";
-
-            // Clear panes to "Signal not available" (same behavior as main Stop button)
-            ClearLvdsPanes();
+            if (_nichiaEthCapture != null)
+            {
+                _nichiaEthCapture.Dispose();
+                _nichiaEthCapture = null;
+                AppendDiagLog("[nfe] Nichia Ethernet capture stopped");
+            }
         }
 
         private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
         {
             // Guard: reject stale callbacks that arrive via Dispatcher.BeginInvoke
-            // after Stop Test / Stop LVDS has already been pressed.
+            // after Stop has been pressed.
             // Without this, queued callbacks re-render the last frame over "No Signal".
-            if (!_lvdsManager.IsCapturing && (_lvdsSimSource == null || !_lvdsSimSource.IsRunning))
+            bool ethActive = _nichiaEthCapture != null && _nichiaEthCapture.IsCapturing;
+            if (!ethActive)
                 return;
 
             // Update LVDS stats labels
             LblLvdsFrameCount.Text = $"Frames: {meta.FrameId} ({meta.ValidLines}/{meta.LinesExpected} lines)";
             LblLvdsBytesReceived.Text = $"Bytes: {meta.TotalBytes:N0}";
             LblLvdsSyncLoss.Text = $"Sync: {meta.SyncLosses}  CRC: {meta.CrcErrors}  Parity: {meta.ParityErrors}";
-            LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
-            // Status text is handled by the stats timer to avoid overwriting Status button output
+
+            // FPS from Ethernet capture
+            double fps = _nichiaEthCapture?.FpsEma ?? 0;
+            LblLvdsFps.Text = $"FPS: {fps:F1}";
+
+            // Status text
             if (DateTime.UtcNow > _statusOverrideUntil)
-                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
+            {
+                LblLvdsStatus.Text = $"Capturing on Ethernet — frame #{meta.FrameId} ({meta.Width}×{meta.Height})";
+            }
 
             // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
@@ -1162,68 +1139,9 @@ namespace VilsSharpX
                                    $"Frame: {cfg.FrameHeight} lines → crop to {cfg.FrameWidth}×{cfg.ActiveHeight}";
         }
 
-        // ── LVDS Test (simulated source) ───────────────────────────────
-
-        private void BtnLvdsTest_Click(object sender, RoutedEventArgs e)
-        {
-            if (_lvdsSimSource != null && _lvdsSimSource.IsRunning)
-            {
-                // Stop simulated source
-                StopLvdsSimulation();
-                return;
-            }
-
-            // Stop real capture if running
-            if (_lvdsManager.IsCapturing)
-            {
-                _lvdsManager.StopCapture();
-                BtnLvdsStart.IsEnabled = true;
-                BtnLvdsStop.IsEnabled = false;
-            }
-
-            // Start simulated source
-            _lvdsSimSource = new LvdsSimulatedSource(_currentDeviceType, targetFps: 30, AppendDiagLog);
-            _lvdsSimSource.OnDataGenerated += OnSimulatedLvdsData;
-
-            // Reset reassembler and manager state, then start sim.
-            // NOTE: ReconfigureForDevice rebuilds the internal reassembler, but the
-            // OnFrameReady event on the manager itself persists (subscribed in Window_Loaded
-            // and ReinitializeForNewResolution), so we do NOT re-add the handler here.
-            _lvdsManager.ReconfigureForDevice(_currentDeviceType);
-            _lvdsSimSource.Start();
-
-            BtnLvdsTest.Content = "Stop Test";
-            BtnLvdsStart.IsEnabled = false;
-            LblLvdsStatus.Text = "Simulated LVDS data — validating pipeline (no hardware)...";
-            UpdateLvdsProtocolLabel();
-            AppendDiagLog("[lvds-sim] test mode started for " + _currentDeviceType.GetDisplayName());
-        }
-
-        private void OnSimulatedLvdsData(byte[] buffer, int count)
-        {
-            // Feed simulated data directly into the manager's reassembler
-            // We need to go through the same pipeline as real serial data
-            _lvdsManager.PushSimulatedData(buffer, count);
-        }
-
-        private void StopLvdsSimulation()
-        {
-            _lvdsSimSource?.Stop();
-            _lvdsSimSource?.Dispose();
-            _lvdsSimSource = null;
-
-            BtnLvdsTest.Content = "Test";
-            BtnLvdsStart.IsEnabled = true;
-            LblLvdsStatus.Text = "Simulation stopped.";
-            AppendDiagLog("[lvds-sim] test mode stopped");
-
-            // Clear panes to "Signal not available" (same behavior as main Stop button)
-            ClearLvdsPanes();
-        }
-
         /// <summary>
         /// Resets panes to "Signal not available" and clears stored LVDS frame data.
-        /// Called when Stop LVDS or Stop Test is pressed.
+        /// Called when Stop is pressed.
         /// </summary>
         private void ClearLvdsPanes()
         {
@@ -1234,210 +1152,6 @@ namespace VilsSharpX
             _lvdsManager.ClearFrame();
             RenderNoSignalFrames();
             ApplyNoSignalUiState(noSignal: true);
-        }
-
-        // ── LVDS Stats Timer ───────────────────────────────────────────
-        // Periodically refreshes LVDS byte/frame counters even when no
-        // complete frames have arrived yet. This is critical for diagnosing
-        // whether the serial port is receiving any data at all.
-
-        private void StartLvdsStatsTimer()
-        {
-            StopLvdsStatsTimer();
-            _lvdsStatsTimer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromMilliseconds(500)
-            };
-            _lvdsStatsTimer.Tick += LvdsStatsTimer_Tick;
-            _lvdsStatsTimer.Start();
-        }
-
-        private void StopLvdsStatsTimer()
-        {
-            if (_lvdsStatsTimer != null)
-            {
-                _lvdsStatsTimer.Stop();
-                _lvdsStatsTimer.Tick -= LvdsStatsTimer_Tick;
-                _lvdsStatsTimer = null;
-            }
-        }
-
-        private void LvdsStatsTimer_Tick(object? sender, EventArgs e)
-        {
-            if (!_lvdsManager.IsCapturing) return;
-            if (DateTime.UtcNow < _statusOverrideUntil) return; // don't overwrite Status button output
-
-            var (frames, syncLosses, crcErrors, parityErrors, totalBytes) = _lvdsManager.GetReassemblerStats();
-            long rawBytes = _lvdsManager.BytesReceived;
-
-            // Update frame stats labels with current values
-            LblLvdsFrameCount.Text = $"Frames: {frames}";
-            LblLvdsBytesReceived.Text = $"Bytes: {rawBytes:N0} (parsed: {totalBytes:N0})";
-            LblLvdsSyncLoss.Text = $"Sync: {syncLosses}  CRC: {crcErrors}  Parity: {parityErrors}";
-            LblLvdsFps.Text = $"FPS: {_lvdsManager.FpsEma:F1}";
-
-            // Update status with diagnostic context when no data flows
-            if (rawBytes == 0 && frames == 0)
-            {
-                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — ⚠ 0 bytes received. " +
-                    "Check: (1) Pico 2 firmware running? Use 📡 Status. " +
-                    "(2) ECU LVDS signal connected to GPIO 2?";
-                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
-            }
-            else if (rawBytes > 0 && frames == 0)
-            {
-                LblLvdsStatus.Text = $"Capturing on {_lvdsPortHint} — {rawBytes:N0} bytes received, " +
-                    "but no valid frames yet (cooked frame magic 0xFE 0xED not found).";
-                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGoldenrod;
-            }
-        }
-
-        // ── Firmware Status Query ──────────────────────────────────────
-
-        private void BtnFirmwareStatus_Click(object sender, RoutedEventArgs e)
-        {
-            string? portName = CmbLvdsPort.SelectedItem as string;
-            if (string.IsNullOrEmpty(portName))
-            {
-                LblLvdsStatus.Text = "Select a COM port first.";
-                return;
-            }
-
-            if (_lvdsManager.IsCapturing)
-            {
-                // Send 'S' command through the active capture connection.
-                // Firmware pauses PIO, sends status, resumes — response arrives in data stream.
-                _statusOverrideUntil = DateTime.UtcNow.AddSeconds(8);
-                LblLvdsStatus.Text = $"Querying firmware on {portName} (via active capture)...";
-                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.SteelBlue;
-
-                _lvdsManager.QueryFirmwareStatusDuringCapture(response =>
-                {
-                    Dispatcher.BeginInvoke(() =>
-                    {
-                        _statusOverrideUntil = DateTime.UtcNow.AddSeconds(8);
-                        LblLvdsStatus.Text = $"Firmware [{portName}]: {response}";
-                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGreen;
-                    });
-                });
-                return;
-            }
-
-            BtnFirmwareStatus.IsEnabled = false;
-            LblLvdsStatus.Text = $"Querying firmware on {portName}...";
-            LblLvdsStatus.Foreground = System.Windows.Media.Brushes.SteelBlue;
-
-            // Run query in background to not block UI
-            Task.Run(() =>
-            {
-                string? response = LvdsUartCapture.QueryFirmwareStatus(portName, AppendDiagLog);
-                Dispatcher.BeginInvoke(() =>
-                {
-                    BtnFirmwareStatus.IsEnabled = true;
-                    if (response != null)
-                    {
-                        LblLvdsStatus.Text = $"Firmware [{portName}]: {response}";
-                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkGreen;
-                    }
-                    else
-                    {
-                        LblLvdsStatus.Text = $"No response from {portName}. " +
-                            "Is Pico 2 firmware flashed? Try 🔄 Boot + flash UF2.";
-                        LblLvdsStatus.Foreground = System.Windows.Media.Brushes.Red;
-                    }
-                });
-            });
-        }
-
-        // ── CRC Self-Test ──────────────────────────────────────────────
-
-        private void BtnCrcSelfTest_Click(object sender, RoutedEventArgs e)
-        {
-            var (allPassed, report) = LvdsCrc.RunSelfTestFormatted();
-            LblCrcSelfTest.Text = report;
-            LblCrcSelfTest.Foreground = allPassed
-                ? System.Windows.Media.Brushes.DarkGreen
-                : System.Windows.Media.Brushes.Red;
-
-            AppendDiagLog(report);
-        }
-
-        // ── Pico 2 Bootloader ──────────────────────────────────────────
-
-        private async void BtnPicoBoot_Click(object sender, RoutedEventArgs e)
-        {
-            // Get the selected COM port
-            string? portName = CmbLvdsPort.SelectedItem as string;
-            if (string.IsNullOrEmpty(portName))
-            {
-                LblLvdsStatus.Text = "Select a COM port first.";
-                return;
-            }
-
-            // Confirm with the user
-            var result = System.Windows.MessageBox.Show(
-                $"Reboot Pico 2 on {portName} into bootloader (BOOTSEL) mode?\n\n" +
-                "The COM port will disconnect and the device will appear\n" +
-                "as a USB mass-storage drive (RPI-RP2) for firmware update.",
-                "Enter Bootloader",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Question);
-
-            if (result != System.Windows.MessageBoxResult.Yes) return;
-
-            try
-            {
-                // Stop simulation if running
-                if (_lvdsSimSource?.IsRunning == true) StopLvdsSimulation();
-
-                // Send bootloader command on background thread (SerialPort can hang)
-                BtnLvdsStart.IsEnabled = false;
-                BtnLvdsStop.IsEnabled = false;
-                BtnPicoBoot.IsEnabled = false;
-                LblLvdsStatus.Text = $"Sending bootloader command to {portName}...";
-                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
-
-                await System.Threading.Tasks.Task.Run(() => _lvdsManager.EnterBootloader(portName));
-
-                AppendDiagLog($"[lvds] Pico 2 on {portName} sent to bootloader mode.");
-
-                // Re-enable after a short delay (port will be gone by then)
-                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-                timer.Tick += (s, _) =>
-                {
-                    timer.Stop();
-                    BtnLvdsStart.IsEnabled = true;
-                    BtnPicoBoot.IsEnabled = true;
-                    LblLvdsStatus.Text = "Pico 2 is in bootloader mode. Copy UF2 to RPI-RP2 drive, then Refresh ports.";
-                    LblLvdsStatus.Foreground = System.Windows.Media.Brushes.DimGray;
-                    // Auto-refresh port list (the old port is gone)
-                    RefreshLvdsPortList();
-                };
-                timer.Start();
-            }
-            catch (Exception ex)
-            {
-                LblLvdsStatus.Text = $"Boot failed: {ex.Message}";
-                LblLvdsStatus.Foreground = System.Windows.Media.Brushes.Red;
-                BtnLvdsStart.IsEnabled = true;
-                BtnPicoBoot.IsEnabled = true;
-                AppendDiagLog($"[lvds] bootloader command failed: {ex.Message}");
-            }
-        }
-
-        private void RunStartupCrcSelfTest()
-        {
-            var (allPassed, report) = LvdsCrc.RunSelfTestFormatted();
-            AppendDiagLog(report);
-            if (LblCrcSelfTest != null)
-            {
-                LblCrcSelfTest.Text = allPassed
-                    ? "CRC self-test: ALL PASSED"
-                    : report;
-                LblCrcSelfTest.Foreground = allPassed
-                    ? System.Windows.Media.Brushes.DarkGreen
-                    : System.Windows.Media.Brushes.Red;
-            }
         }
 
         // ── End LVDS ────────────────────────────────────────────────────────
@@ -1566,7 +1280,7 @@ namespace VilsSharpX
             SaveUiSettings();
             if (_recordingManager.IsRecording) StopRecording();
             StopAll();
-            StopLvdsStatsTimer();
+            try { StopNichiaEthCapture(); } catch { /* ignore */ }
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
         }
 
@@ -1603,7 +1317,18 @@ namespace VilsSharpX
                 // Stop UI/loops as before
                 StopAll();
 
-                // Start BLACK TX loop (do NOT stop transmitter)
+                // StopAll() closes the shared pcap device handle (singleton) used
+                // by captures AND the TX transmitter.  We MUST reinitialize the TX
+                // to reopen a fresh handle before starting the black loop.
+                {
+                    ushort ethType = ParseHexUshort(_avtpEtherType, 0x22F0);
+                    byte stIdByte = ParseHexByte(_streamIdLastByte, 0x50);
+                    string? deviceHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
+                    _txManager.Initialize(deviceHint, _srcMac, _dstMac,
+                        _vlanId, _vlanPriority, ethType, stIdByte);
+                }
+
+                // Start BLACK TX loop — strict 0x00 for LSM keepalive.
                 _txManager.StartBlackLoop(fps);
 
                 LblStatus.Text = "Player STOP: sending BLACK AVTP (Signal not available).";
@@ -1997,7 +1722,7 @@ namespace VilsSharpX
             }
 
             // -------------------------------------------------
-            // Start live sources ONLY in AVTP Live mode
+            // Start AVTP live source in AVTP Live mode
             // -------------------------------------------------
             bool allowLiveSources = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor;
             if (allowLiveSources)
@@ -2006,16 +1731,20 @@ namespace VilsSharpX
                 // NOTE: We always (re)start capture on Start in AVTP Live mode.
                 // Reason: at app startup, the NIC selection / device hint may change after settings load,
                 // and keeping an old capture instance can leave the UI stuck on the fallback image until Stop->Start.
-                if (_avtpLiveEnabled)
-                {
-                    // Ensure we use the NIC currently selected in the UI (avoids slow/incorrect auto-pick).
-                    string? deviceHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
+                // Ensure we use the NIC currently selected in the UI (avoids slow/incorrect auto-pick).
+                string? deviceHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
 
-                    // Persist the final hint so next Start uses the same interface.
-                    _avtpLiveDeviceHint = deviceHint;
+                // Persist the final hint so next Start uses the same interface.
+                _avtpLiveDeviceHint = deviceHint;
 
-                    _liveCapture.StartEthernetCapture(deviceHint);
-                }
+                _liveCapture.StartEthernetCapture(deviceHint);
+            }
+
+            // Pane B real LVDS over Ethernet (Aurix GETH), managed by Start/Stop.
+            // Use it for Nichia in both AVTP Live and Generator/Player modes.
+            if (_currentDeviceType == LsmDeviceType.Nichia)
+            {
+                StartNichiaEthCapture();
             }
             
         }
@@ -2084,6 +1813,8 @@ namespace VilsSharpX
 
             // Stop all live capture sources
             _liveCapture.StopAll();
+            StopNichiaEthCapture();
+            if (LblNichiaEthStatus != null) LblNichiaEthStatus.Text = "Ethernet: idle";
 
             // Ensure we don't remain paused after stopping.
             _playback.PauseGate.Set();
@@ -2290,7 +2021,7 @@ namespace VilsSharpX
         private byte[] GetASourceBytes()
         {
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
-                return _liveCapture.HasAvtpFrame ? _liveCapture.AvtpFrame : _idleGradientFrame;
+                return _liveCapture.HasAvtpFrame ? _liveCapture.AvtpFrame : _noSignalGrayFrame;
 
             return _lastLoaded switch
             {
@@ -2322,10 +2053,38 @@ namespace VilsSharpX
                 var a = new Frame(_currentWidth, _currentHeight, aBytes, DateTime.UtcNow);
                 _playback.IncrementCountA();
         
-                // B: simulated LVDS = A with brightness delta
-                var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
-                var b = new Frame(_currentWidth, _currentHeight, bBytes, DateTime.UtcNow);
-                _playback.IncrementCountB();
+                // B: prefer real Nichia Ethernet LVDS when available; otherwise simulated LVDS (A + delta)
+                Frame b;
+                bool useRealEthB = false;
+                if (_currentDeviceType == LsmDeviceType.Nichia
+                    && _nichiaEthCapture != null
+                    && _nichiaEthCapture.IsCapturing
+                    && _nichiaEthCapture.FramesCompleted > 0)
+                {
+                    lock (_frameLock)
+                    {
+                        if (_latestB != null
+                            && _latestB.Width == _currentWidth
+                            && _latestB.Height == _currentHeight)
+                        {
+                            b = _latestB;
+                            useRealEthB = true;
+                        }
+                        else
+                        {
+                            var bBytesFallback = ApplyValueDelta(a.Data, _bValueDelta);
+                            b = new Frame(_currentWidth, _currentHeight, bBytesFallback, DateTime.UtcNow);
+                        }
+                    }
+                }
+                else
+                {
+                    var bBytes = ApplyValueDelta(a.Data, _bValueDelta);
+                    b = new Frame(_currentWidth, _currentHeight, bBytes, DateTime.UtcNow);
+                }
+
+                if (!useRealEthB)
+                    _playback.IncrementCountB();
         
                 // D: diff
                 var d = AbsDiff(a, b);
@@ -2360,7 +2119,8 @@ namespace VilsSharpX
                 lock (_frameLock)
                 {
                     _latestA = a;
-                    _latestB = b;
+                    if (!useRealEthB)
+                        _latestB = b;
                     _latestD = d;
                 }
                 _playback.IncrementCountD();
@@ -2477,7 +2237,16 @@ namespace VilsSharpX
             //   - Otherwise, derive B from A using the UI delta (mock LVDS)
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
-                if (_lvdsManager.IsCapturing && _lvdsManager.HasFrame)
+                bool ethHasFrame = _nichiaEthCapture != null
+                                   && _nichiaEthCapture.IsCapturing
+                                   && _nichiaEthCapture.FramesCompleted > 0;
+
+                if (ethHasFrame)
+                {
+                    // B already comes from HandleLvdsFrameReady() via _latestB.
+                    // Keep current b from frame cache (do not overwrite with mock data).
+                }
+                else if (_lvdsManager.IsCapturing && _lvdsManager.HasFrame)
                 {
                     // Real LVDS frame for Pane B
                     var lvdsData = ImageUtils.Copy(_lvdsManager.LvdsFrame);
@@ -2514,7 +2283,18 @@ namespace VilsSharpX
             if (LblDiffStats != null)
                 LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels);
 
-            ApplyNoSignalUiState(noSignal: false);
+            // Per-pane no-signal: when AVTP hasn't arrived but ETH pane B is valid,
+            // show "Signal not available" only on pane A.
+            if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_liveCapture.HasAvtpFrame)
+            {
+                if (NoSignalA != null) NoSignalA.Visibility = Visibility.Visible;
+                if (NoSignalB != null) NoSignalB.Visibility = Visibility.Collapsed;
+                if (NoSignalD != null) NoSignalD.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                ApplyNoSignalUiState(noSignal: false);
+            }
             UpdateFpsLabels();
         }
 
@@ -2546,7 +2326,20 @@ namespace VilsSharpX
             }
 
             if (LblRunInfoB != null)
-                LblRunInfoB.Text = StatusFormatter.FormatRunInfoB(isRunning, isPaused, noSignal, _playback.BFpsEma);
+            {
+                double paneBFps = 0.0;
+                if (!noSignal)
+                {
+                    if (_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FpsEma > 0.0)
+                        paneBFps = _nichiaEthCapture.FpsEma;
+                    else if (_lvdsManager.IsCapturing && _lvdsManager.FpsEma > 0.0)
+                        paneBFps = _lvdsManager.FpsEma;
+                    else
+                        paneBFps = _playback.BFpsEma;
+                }
+
+                LblRunInfoB.Text = StatusFormatter.FormatRunInfoB(isRunning, isPaused, noSignal, paneBFps);
+            }
         }
 
         private double GetShownFps(double avtpInFps)

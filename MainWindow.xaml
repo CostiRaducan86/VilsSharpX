@@ -364,38 +364,21 @@
             </Grid>
         </Border>
 
-        <!-- Right side: LVDS Capture (Pico 2 / Serial) -->
+        <!-- Right side: LVDS Capture (Pane B) -->
         <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" BorderBrush="#ABADB3" BorderThickness="1" CornerRadius="8" Margin="4" Padding="6" Background="#F0F0F0">
             <GroupBox Header="LVDS Capture (Pane B)" Padding="8">
                 <StackPanel Orientation="Vertical">
-                    <!-- COM Port selection -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
-                        <TextBlock Text="COM Port:" VerticalAlignment="Center" Width="70" Margin="0,0,4,0"/>
-                        <ComboBox x:Name="CmbLvdsPort" Width="110" SelectionChanged="CmbLvdsPort_SelectionChanged" Margin="0,0,4,0"/>
-                        <Button Content="Refresh" Click="BtnRefreshLvdsPorts_Click" Padding="6,4" Width="56"/>
-                    </StackPanel>
-
-                    <!-- LVDS Capture Start/Stop -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
-                        <Button x:Name="BtnLvdsStart" Content="Start LVDS" Click="BtnLvdsStart_Click" Padding="8,4" Width="90" Margin="0,0,8,0"/>
-                        <Button x:Name="BtnLvdsStop" Content="Stop LVDS" Click="BtnLvdsStop_Click" Padding="8,4" Width="90" IsEnabled="False" Margin="0,0,8,0"/>
-                        <Button x:Name="BtnLvdsTest" Content="Test" Click="BtnLvdsTest_Click" Padding="8,4" Width="56"
-                                ToolTip="Run simulated LVDS data (no hardware needed) to validate the pipeline."/>
-                        <Button x:Name="BtnPicoBoot" Content="&#x1F504; Boot" Click="BtnPicoBoot_Click" Padding="8,4" Width="64" Margin="8,0,0,0"
-                                ToolTip="Reboot Pico 2 into USB bootloader (BOOTSEL mode) for firmware update. The COM port will disconnect and RPI-RP2 drive will appear."
-                                Foreground="DarkOrange"/>
-                        <Button x:Name="BtnFirmwareStatus" Content="📡 Status" Click="BtnFirmwareStatus_Click" Padding="8,4" Width="72" Margin="4,0,0,0"
-                                ToolTip="Query Pico 2 firmware status (mode, baud rate, bytes received). Only works when capture is NOT running."
-                                Foreground="SteelBlue"/>
-                    </StackPanel>
+                    <!-- Ethernet capture status -->
+                    <TextBlock x:Name="LblNichiaEthStatus" Foreground="DimGray"
+                               Text="Ethernet: idle" Margin="0,0,0,4"/>
 
                     <!-- Separator -->
                     <Rectangle Height="1" Fill="Gray" Margin="0,4,0,8" HorizontalAlignment="Stretch"/>
 
-                    <!-- LVDS Status -->
+                    <!-- LVDS Info -->
                     <TextBlock Text="LVDS Info" FontWeight="SemiBold" Margin="0,0,0,4"/>
                     <TextBlock x:Name="LblLvdsStatus" TextWrapping="Wrap" Foreground="DimGray"
-                               Text="Not connected. Select a COM port and click Start LVDS."/>
+                               Text=""/>
 
                     <!-- LVDS Protocol details (auto-detected from LSM device type) -->
                     <TextBlock x:Name="LblLvdsProtocol" TextWrapping="Wrap" Foreground="DimGray" Margin="0,8,0,0"
@@ -404,7 +387,7 @@
                     <!-- Separator -->
                     <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
 
-                    <!-- Frame statistics -->
+                    <!-- Frame Statistics -->
                     <TextBlock Text="Frame Statistics" FontWeight="SemiBold" Margin="0,0,0,4"/>
                     <TextBlock x:Name="LblLvdsFrameCount" Text="Frames: 0" Foreground="DimGray"/>
                     <TextBlock x:Name="LblLvdsBytesReceived" Text="Bytes: 0" Foreground="DimGray"/>
@@ -416,12 +399,9 @@
 
                     <!-- Diagnostics -->
                     <TextBlock Text="Diagnostics" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                    <Button x:Name="BtnCrcSelfTest" Content="CRC Self-Test" Click="BtnCrcSelfTest_Click"
-                            Padding="8,4" Width="110" HorizontalAlignment="Left" Margin="0,0,0,4"
-                            ToolTip="Validate CRC-16 and CRC-32 algorithms against known test vectors."/>
                     <TextBlock x:Name="LblCrcSelfTest" TextWrapping="Wrap" Foreground="DimGray"
                                FontFamily="Consolas" FontSize="10.5"
-                               Text="Click CRC Self-Test to validate algorithms."/>
+                               Text=""/>
 
                     <!-- Separator -->
                     <Rectangle Height="1" Fill="Gray" Margin="0,8,0,8" HorizontalAlignment="Stretch"/>
@@ -503,8 +483,8 @@
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
                             <TextBlock Text="Mode of Operation:" VerticalAlignment="Center" Width="110" Margin="0,0,4,0"/>
                             <ComboBox x:Name="CmbModeOfOperation" Width="160" SelectedIndex="0" SelectionChanged="CmbModeOfOperation_SelectionChanged">
-                                <ComboBoxItem Content="AVTP Live (Monitoring)"/>
-                                <ComboBoxItem Content="Generator/Player (Files)"/>
+                                <ComboBoxItem Content="AVTP Monitoring"/>
+                                <ComboBoxItem Content="AVTP Generator"/>
                             </ComboBox>
                         </StackPanel>
 
@@ -519,7 +499,7 @@
                         </StackPanel>
 
                         <!-- ECU Variant -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,8">
                             <TextBlock Text="ECU Variant:" VerticalAlignment="Center" Width="110" Margin="0,0,4,0"/>
                             <ComboBox x:Name="CmbEcuVariant" Width="160" SelectedIndex="0" SelectionChanged="CmbEcuVariant_SelectionChanged">
                                 <ComboBoxItem Content="MB PLU-HD 1.0 LH"/>
@@ -528,6 +508,15 @@
                                 <ComboBoxItem Content="MB PLU-HD 2.0 RH"/>
                                 <ComboBoxItem Content="MB CHLC 1.0"/>
                                 <ComboBoxItem Content="MB CHLC 2.0"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- LVDS Mode -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <TextBlock Text="LVDS Mode:" VerticalAlignment="Center" Width="110" Margin="0,0,4,0"/>
+                            <ComboBox x:Name="CmbLvdsMode" Width="160" SelectedIndex="0" SelectionChanged="CmbLvdsMode_SelectionChanged">
+                                <ComboBoxItem Content="LVDS Monitoring"/>
+                                <ComboBoxItem Content="LVDS Generator"/>
                             </ComboBox>
                         </StackPanel>
                     </StackPanel>
