@@ -28,3 +28,21 @@ docs/outputs/
 
 # Large sample inputs (pcap/avi) are kept locally
 docs/inputs/
+
+# Aurix ADS local/generated/vendor artifacts
+Aurix_Firmware/.ads/
+Aurix_Firmware/.settings/
+Aurix_Firmware/AURIX_code_examples-master/
+Aurix_Firmware/Configurations/
+Aurix_Firmware/Libraries/
+Aurix_Firmware/.cproject
+Aurix_Firmware/.project
+Aurix_Firmware/*.launch
+Aurix_Firmware/*.pdf
+Aurix_Firmware/*.jpg
+Aurix_Firmware/*.csv
+Aurix_Firmware/*.patch
+Aurix_Firmware/Lcf_Gnuc_Tricore_Tc.lsl
+Aurix_Firmware/Lcf_Tasking_Tricore_Tc.lsl
+Aurix_Firmware/TriCore Debug (TASKING)/
+!Aurix_Firmware/TriCore Debug (TASKING)/VilsSharpX.elf
