@@ -4,8 +4,8 @@
 
 This is an **Aurix Development Studio (Eclipse CDT)** project for the TC397 TriCore microcontroller with TASKING compiler.
 
-**Build System:** Eclipse Managed Builder + Infineon Aurix plugins
-**Toolchain:** TASKING TriCore compiler (comes with Aurix Development Studio)
+**Build System:** Eclipse Managed Builder + Infineon Aurix plugins  
+**Toolchain:** TASKING TriCore compiler (comes with Aurix Development Studio)  
 **Target Configuration:** TriCore Debug (TASKING) configuration
 
 ---
@@ -13,31 +13,37 @@ This is an **Aurix Development Studio (Eclipse CDT)** project for the TC397 TriC
 ## Build Method 1: Aurix Development Studio GUI (Recommended)
 
 ### Prerequisites
+
 - **Aurix Development Studio** (ADS) installed (includes TASKING compiler)
-  - Download: https://www.infineon.com/cms/en/tools/aurix-development-studio/
+  - Download: <https://www.infineon.com/cms/en/tools/aurix-development-studio/>
 - Project already imported in ADS
 
 ### Steps
 
 1. **Open Aurix Development Studio**
 2. **Import or open the project:**
-   ```
+
+   ```powershell
    File → Open Projects from File System
    → C:\...\VilsSharpX\VilsSharpX\Aurix_Firmware
    ```
 
 3. **Select Build Configuration:**
+
    - Right-click project → Build Configurations → Set Active → "TriCore Debug (TASKING)"
 
 4. **Clean the project:**
+
    - Right-click project → Clean Project
 
 5. **Build the project:**
+
    - Right-click project → Build Project
    - Or: Project → Build All (Ctrl+B)
 
 6. **Expected Success Output:**
-   ```
+
+   ```powershell
    Building: asclin9_dma.c
    Building: asclin9_rx.c
    Building: Cpu0_Main.c
@@ -49,12 +55,14 @@ This is an **Aurix Development Studio (Eclipse CDT)** project for the TC397 TriC
    ```
 
 7. **Output Artifacts:**
+
    - **Main ELF:** `TriCore Debug (TASKING)/VilsSharpX.elf`
    - **Hex File:** `TriCore Debug (TASKING)/VilsSharpX.hex`
    - **Map:** `TriCore Debug (TASKING)/VilsSharpX.map`
 
 ### Build Output Location
-```
+
+```text
 Aurix_Firmware/
 ├── TriCore Debug (TASKING)/
 │   ├── VilsSharpX.elf          ← Main firmware image
@@ -107,17 +115,20 @@ cd "Aurix_Firmware\TriCore Debug (TASKING)"
 ## Troubleshooting Build Errors
 
 ### Error: `asclin9_dma.h: No such file or directory`
+
 - **Cause:** Eclipse hasn't indexed the new files yet
 - **Fix:** Right-click project → Index → Rebuild
 
 ### Error: `IfxDma.h not found`
+
 - **Cause:** iLLD include paths not configured
-- **Fix:** 
+- **Fix:**
   1. Right-click project → Properties → C/C++ Build → Settings
   2. Check GCC C Compiler → Include Paths
   3. Ensure iLLD path is included (usually `Libraries/iLLD`)
 
 ### Error: `undefined reference to 'IfxDma_DmaChannel_init'`
+
 - **Cause:** iLLD DMA library not linked, or not compiled
 - **Fix:**
   1. Check `Libraries/` folder for iLLD source files
@@ -125,6 +136,7 @@ cd "Aurix_Firmware\TriCore Debug (TASKING)"
   3. Re-build iLLD library first if needed
 
 ### Error: `VilsSharpX.elf not created`
+
 - **Cause:** Link phase failed
 - **Fix:**
   1. Clean project completely: Right-click → Clean Project
@@ -165,13 +177,16 @@ grep -i "asclin9_dma" "TriCore Debug (TASKING)/VilsSharpX.map"
 ### Option A: Delta Testing (Verify DMA Is Actually Being Used)
 
 1. **Use Eclipse Debugger (Recommended):**
-   ```
+
+   ```text
    Run → Debug As → Embedded C/C++ Application (TASKING)
    ```
+
    - Set breakpoint in `ASCLIN9_DMA_ISR`
    - Run and verify ISR fires (should hit every ~1.6 ms)
 
 2. **Watch Variables:**
+
    - Add to Variables panel: `g_asclin9_dma.completionCount`
    - Observe it increment (should reach ~48/sec)
 
@@ -179,7 +194,7 @@ grep -i "asclin9_dma" "TriCore Debug (TASKING)/VilsSharpX.map"
 
 1. **Connect TC397 debugger** (J-Link, Segger, etc.)
 2. **In Eclipse:** Run → Debug As → (TASKING configured debug target)
-3. **Flash automatically and break at main()**
+3. **Flash automatically and break at `main()`**
 
 ### Option C: Export ELF for External Programmer
 
@@ -195,26 +210,31 @@ If using a standalone programmer:
 ### Clean vs. Rebuild
 
 - **Clean Project:** Deletes all `.o` files and `.elf`
-  ```
+
+  ```text
   Right-click project → Clean Project
   ```
+
   - Takes ~5 seconds
   - Next build will recompile everything (Full Build)
 
 - **Incremental Build:** Only recompiles changed files
-  ```
+
+  ```text
   Ctrl+B or Project → Build Project
   ```
+
   - Takes ~2-5 seconds
   - Most common during development
 
 ### File Dependencies
 
 The Aurix build system tracks:
+
 - **asclin9_dma.c** depends on:
-  - asclin9_dma.h (header with constants)
-  - IfxDma.h (from iLLD Libraries/)
-  - IfxAsclin.h (from iLLD Libraries/)
+  - `asclin9_dma.h` (header with constants)
+  - `IfxDma.h` (from iLLD Libraries/)
+  - `IfxAsclin.h` (from iLLD Libraries/)
 
 If any `.h` changes, all depending `.c` files auto-recompile.
 
@@ -234,16 +254,20 @@ After build completes successfully, you should have:
 ## Reporting Build Issues
 
 If build fails, provide:
+
 1. **Full console output** from Eclipse Build panel
 2. **Error message** (copy entire error line)
 3. **Verification** that files exist:
+
    ```powershell
    Test-Path "Aurix_Firmware/asclin9_dma.c"          # Should be True
    Test-Path "Aurix_Firmware/asclin9_dma.h"          # Should be True
    Test-Path "Aurix_Firmware/.project"               # Should be True
    ```
+
 4. **TASKING compiler version:**
-   ```
+
+   ```text
    In Eclipse: Help → About Aurix Development Studio
    ```
 

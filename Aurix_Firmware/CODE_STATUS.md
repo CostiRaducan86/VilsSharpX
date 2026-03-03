@@ -1,221 +1,119 @@
-# DMA Implementation Summary & Code Status
+# Code Status - DMA Step 1
 
-## Files Created/Modified
+## Current State
 
-### ✅ New Files (Code-Complete)
-
-1. **[asclin9_dma.h](asclin9_dma.h)** (98 lines)
-   - Header with DMA configuration constants
-   - Opaque `Asclin9Dma` struct definition
-   - Public API: `asclin9_dma_init()`, `asclin9_dma_get_completed_buffer()`, diagnostics
-   - Status: **Ready for build**
-
-2. **[asclin9_dma.c](asclin9_dma.c)** (256 lines)
-   - DMA module implementation with ISR handler
-   - ASCLIN9 configuration (RX-only, no SW FIFO)
-   - DMA channel setup with ping-pong buffers
-   - Atomic buffer swap in ISR (Priority 13)
-   - Status: **Ready for build**
-
-### ✅ Modified Files
-
-1. **[Cpu0_Main.c](Cpu0_Main.c)**
-   - Changed include: `#include "asclin9_rx.h"` → `#include "asclin9_dma.h"`
-   - Replaced init: `asclin9_init()` → `asclin9_dma_init()`
-   - Replaced polling loop with non-blocking check:
-     ```c
-     uint8 *completed = asclin9_dma_get_completed_buffer();
-     if (completed != NULL_PTR) {
-         consume_dma_buffer(completed, ASCLIN9_DMA_BUFFER_SIZE);
-     }
-     ```
-   - Status: **Ready for build**
-
-### 📋 Documentation Files
-
-1. **[DMA_DUAL_BUFFER_DESIGN.md](DMA_DUAL_BUFFER_DESIGN.md)** (250 lines)
-   - Architecture rationale and design decisions
-   - Timing analysis and performance expectations
-   - Data flow diagrams
-   - Validation checklist
-
-2. **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** (300 lines)
-   - Step-by-step build guidance for Aurix Development Studio
-   - Troubleshooting common compile errors
-   - Hardware flashing instructions
-   - Success/failure criteria
-
-3. **[STEP1_BUILD_VALIDATE.md](STEP1_BUILD_VALIDATE.md)** (200 lines)
-   - Hardware validation procedures
-   - Watch variables for debugging
-   - Common runtime issues and diagnostics
-   - Timeline for full system completion
+### Implementation Complete, Awaiting Build + Hardware Validation
 
 ---
 
-## Code Quality Checklist
+## Scope Delivered
 
-### Compilation Safety ✅
-- [ ] No syntax errors in `.c` / `.h` files
-- [ ] All includes present and correct (`Ifx_Types.h`, `IfxDma.h`, `IfxAsclin_Asc.h`)
-- [ ] Function declarations match definitions
-- [ ] No undefined references to iLLD functions
+- DMA-based ASCLIN9 RX path
+- Dual-buffer ping-pong buffer model
+- Main loop integration in `Cpu0_Main.c`
+- Documentation package for build and validation
 
-### Runtime Safety ✅
-- [ ] Dual buffers aligned to 8 bytes (`IFX_ALIGN(8)`)
-- [ ] ISR uses atomic operations (disable/enable interrupts)
-- [ ] Single-writer (ISR), single-reader (main loop) → no race conditions
-- [ ] Buffer completionflag cleared atomically
-- [ ] No spinlocks or busy-wait patterns
+## Files
 
-### Integration ✅
-- [ ] ASCLIN9 ISR disabled (RX via DMA only)
-- [ ] DMA ISR priority (13) lower than ASCLIN errors (14-15)
-- [ ] Frame parser (`rxmon_feed()`) called from main loop on buffer ready
-- [ ] FPS measurement (`fps_update()`) non-blocking
+### New
 
----
+- `asclin9_dma.h`
+- `asclin9_dma.c`
+- `BUILD_INSTRUCTIONS.md`
+- `DMA_DUAL_BUFFER_DESIGN.md`
+- `STEP1_BUILD_VALIDATE.md`
+- `FILE_MANIFEST.md`
+- `HANDOFF_SUMMARY.md`
+- `COMPLETION_CHECKLIST.md`
 
-## Key Design Parameters
+### Modified
 
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| **Baud Rate** | 12.5 Mbaud | 0xC00000 / 96 MHz AClk |
-| **Buffer Size** | 2560 bytes | ~10 Nichia frames (260 bytes/frame) |
-| **Element Size** | 32 bits | 4 bytes per DMA element |
-| **Transfers Per Buffer** | 80 | (2560 / 32) = 80 transfers to ISR |
-| **ISR Frequency** | ~1.6 ms | 1 / (12.5 Mbaud × 7 bits/byte / 2560 bytes) |
-| **ISR Priority** | 13 | Below ASCLIN RX/ERR (14-15) |
-| **ASCLIN Config** | P14.7, 8N1/8Odd1 | RX only, no TX, no SW FIFO |
-| **DMA Mode** | Ping-pong | bufferA ↔ bufferB atomically on ISR |
+- `Cpu0_Main.c`
 
 ---
 
-## Async Dataflow (High-Level)
+## Quality Checklist
 
-```
-ASCLIN9 RXData Register
-         ↓
-        DMA Transfer (32 bits at a time)
-         ↓
-    bufferA or bufferB (as per pCurrentDest)
-         ↓
-   [DMA completes 80 transfers = 2560 bytes]
-         ↓
-    ASCLIN9_DMA_ISR fires (Priority 13)
-    - Swap pCurrentDest (bufferA ↔ bufferB)
-    - Set pCompletedBuffer = (old pCurrentDest)
-         ↓
-    Main Loop (while(1))
-    - Non-blocking: uint8 *buf = asclin9_dma_get_completed_buffer()
-    - If buf != NULL:
-      - rxmon_feed(buf, 2560);  ← Parser consumes 10 frames
-    - fps_update();
-         ↓
-    rxmon parser processes 260-byte chunks
-    (row parity, CRC16 validation, telemetry update)
-```
+### Compilation Safety
+
+- [ ] No syntax errors in `*.c` / `*.h`
+- [ ] iLLD include paths resolved
+- [ ] DMA symbols linked correctly
+
+### Runtime Safety
+
+- [ ] ISR/consumer ownership is race-safe
+- [ ] `timeoutWarnings` remains stable in nominal load
+- [ ] Parser receives complete buffer flow
+
+### Integration
+
+- [ ] Existing timing/fps update path unaffected
+- [ ] Main loop remains non-blocking
+- [ ] Legacy module kept only as reference
 
 ---
 
-## Potential Compile Issues & Fixes
+## Design Parameters
 
-### Issue 1: `IfxDma.h not found`
-- **Cause:** iLLD library not in include path
-- **Fix:** In Eclipse, right-click → Properties → C/C++ Build → Settings → Add include path `Libraries/iLLD`
-
-### Issue 2: `undefined reference to 'IfxDma_DmaChannel_init'`
-- **Cause:** iLLD library not compiled/linked
-- **Fix:** Check `Libraries/iLLD` is built; rebuild library if needed
-
-### Issue 3: `asclin9_dma.h: No such file or directory`
-- **Cause:** Eclipse hasn't indexed new files
-- **Fix:** Right-click project → Index → Rebuild
-
-### Issue 4: Build succeeds but `VilsSharpX.elf` not updated
-- **Cause:** Linker not re-invoking (incremental build cache issue)
-- **Fix:** Right-click project → Clean → Build (full rebuild)
+| Parameter | Value | Note |
+| --- | --- | --- |
+| RX baud | 12.5 Mbaud | Nichia stream |
+| Buffer size | 2560 bytes | ~10 lines batch |
+| Buffers | 2 | ping-pong |
+| DMA completion cadence | ~1.6 ms | at nominal baud |
+| ISR priority | 13 | below ASCLIN RX/ERR |
 
 ---
 
-## Testing Strategy (Phase 1 Validation)
+## Common Build Issues
+
+### `IfxDma.h` not found
+
+- **Cause:** iLLD include path missing
+- **Fix:** add iLLD include directories in ADS settings
+
+### `undefined reference to IfxDma_DmaChannel_init`
+
+- **Cause:** iLLD DMA module not linked
+- **Fix:** ensure iLLD sources/libraries are compiled in current config
+
+### `asclin9_dma.h: No such file or directory`
+
+- **Cause:** index/build state stale
+- **Fix:** rebuild project index + clean build
+
+---
+
+## Validation Strategy
 
 ### Pre-Hardware
-1. ✅ Build firmware successfully (0 errors, 0 warnings)
-2. ✅ Verify `asclin9_dma.o` created and linked into `.elf`
-3. ✅ Check `.map` file contains `asclin9_dma` and ISR symbols
 
-### Hardware (Debugger)
-1. Flash firmware to TC397
-2. Attach debugger (J-Link/GDB)
-3. Add watches:
-   - `g_asclin9_dma.completionCount` (increment every ~1.6 ms)
-   - `g_rxmon.framesOk` (increment ~48/sec at 48 FPS)
-   - `g_rxmon.framesCrcBad` (should stay 0)
-4. Let run 5 seconds, check:
-   - `completionCount` ≈ 3,125 (5 sec / 1.6 ms)
-   - `framesOk` ≈ 240 (5 sec × 48 FPS)
-   - `framesCrcBad` = 0 (no corrupted frames)
+1. Build with `TriCore Debug (TASKING)`
+2. Confirm `VilsSharpX.elf` output
+3. Check map/link symbols for DMA references
 
-### Expected Success
-- No ISR exceptions or crashes
-- Parser accepting all frames without CRC errors
-- CPU load reduced from ~25% (old polling) to ~8% (new DMA)
-- Deterministic ~1.6 ms interrupt interval (low jitter)
+### Hardware
+
+1. Flash firmware
+2. Run debugger watch on completion counters
+3. Confirm parser counters increase and CRC stays healthy
+
+### Success Targets
+
+- No ISR faults
+- Stable completion cadence
+- No sustained timeout warnings
 
 ---
 
-## Next Actions (User Checklist)
+## Deferred to Phase 2
 
-- [ ] **1. Open Aurix Development Studio**
-- [ ] **2. Import project:** File → Open Projects from File System → `Aurix_Firmware`
-- [ ] **3. Configure build:** Right-click → Build Configurations → Set Active → "TriCore Debug (TASKING)"
-- [ ] **4. Clean:** Right-click → Clean Project
-- [ ] **5. Build:** Ctrl+B or Project → Build Project
-  - Expected: "0 error, 0 warning"
-  - Output: `VilsSharpX.elf`, `VilsSharpX.hex`, `asclin9_dma.o`
-- [ ] **6. Flash & Debug:** Run → Debug As → Embedded C/C++ Application (TASKING)
-- [ ] **7. Validate:** Monitor watch variables as per [STEP1_BUILD_VALIDATE.md](STEP1_BUILD_VALIDATE.md)
-
-**If build fails:** Copy full error message and run:
-```powershell
-Test-Path "Aurix_Firmware/asclin9_dma.c"   # Should be True
-Test-Path "Aurix_Firmware/asclin9_dma.h"   # Should be True
-```
+- Ethernet TX packaging from DMA-fed parser output
+- Host protocol adaptation and end-to-end transport validation
 
 ---
 
-## Known Limitations & TODOs
+## Recommendation
 
-### Current Implementation
-- ✅ DMA + dual buffer ping-pong working
-- ✅ ISR atomic swap logic verified
-- ✅ Main loop non-blocking consumer pattern
-- ⚠️ DMA destination address updated via ISR flag, not direct register write
-  - *Note:* Current design relies on ISR to manage pCurrentDest; registers updated on next DMA cycle
-  - *Alternative:* Could use iLLD linked-list mode if needed; test first
-
-### Phase 2 (Deferred)
-- [ ] Ethernet TX implementation on TC397
-- [ ] UDP protocol definition (cooked frame format)
-- [ ] C# host listener socket
-- [ ] Network performance optimization
-
----
-
-## References
-
-- **iLLD Modules Used:**
-  - `IfxDma` / `IfxDma_Dma` / `IfxDma_DmaChannel`
-  - `IfxAsclin_Asc` (ASCLIN driver)
-  - `IfxStm` (STM timer for FPS)
-  - `IfxSrc` (interrupt routing)
-
-- **Hardware Manual:** Infineon TC3x7 RM (multcore DMA)
-- **ASCLIN Protocol:** Infineon ASCLIN Shell training manual
-
----
-
-**Status: READY FOR BUILD** ✅
-
-All code is in place and syntax-checked. Next step: Build in Aurix Development Studio.
+Build in ADS first, then execute `STEP1_BUILD_VALIDATE.md` checklist for runtime confirmation.
