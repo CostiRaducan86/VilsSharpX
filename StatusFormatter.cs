@@ -50,9 +50,10 @@ public static class StatusFormatter
     /// <summary>
     /// Formats the diff stats label.
     /// </summary>
-    public static string FormatDiffStats(int maxDiff, int minDiff, double meanAbsDiff, int aboveDeadband, int totalDarkPixels)
+    public static string FormatDiffStats(int maxDiff, int minDiff, double meanAbsDiff, int aboveDeadband, int totalDarkPixels, double matchNcc = double.NaN)
     {
-        return $"COMPARE (LVDS\u2212AVTP): max_positive_dev={Math.Max(0, maxDiff)}  max_negative_dev={Math.Min(0, minDiff)}  average_pixels_dev={meanAbsDiff:F0}  total_pixels_dev={aboveDeadband}  total_dark_pixels={totalDarkPixels}";
+        string nccText = !double.IsNaN(matchNcc) ? $"  sync_ncc={matchNcc:F4}" : "";
+        return $"COMPARE (LVDS\u2212AVTP): max_positive_dev={Math.Max(0, maxDiff)}  max_negative_dev={Math.Min(0, minDiff)}  average_pixels_dev={meanAbsDiff:F0}  total_pixels_dev={aboveDeadband}  total_dark_pixels={totalDarkPixels}{nccText}";
     }
 
     /// <summary>

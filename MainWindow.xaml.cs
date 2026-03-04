@@ -150,6 +150,8 @@ namespace VilsSharpX
         private Frame? _pausedA;
         private Frame? _pausedB;
         private Frame? _pausedD;
+        /// <summary>Sync-matched A that corresponds to _pausedB, frozen at pause time.</summary>
+        private Frame? _pausedMatchedA;
 
         private readonly object _frameLock = new();
 
@@ -159,12 +161,16 @@ namespace VilsSharpX
         // sent and use it for a correct diff comparison.
         private const int SyncRingSize = 128;
         private readonly Frame?[] _syncRing = new Frame?[SyncRingSize];
+        /// <summary>Cached per-pixel variance for each ring entry (set at push time).</summary>
+        private readonly double[] _syncRingVarPerPx = new double[SyncRingSize];
         private volatile int _syncRingHead;
         /// <summary>
         /// The A frame that best matches the current _latestB for diff.
         /// Updated each time a new LVDS B frame arrives via HandleLvdsFrameReady.
         /// </summary>
         private Frame? _matchedAForDiff;
+        /// <summary>NCC of the best match (1.0 = perfect, 0 = uncorrelated). NaN when not computed.</summary>
+        private double _lastMatchNcc = double.NaN;
 
         // Zoom/pan manager (replaces individual _zoom/_pan fields)
         private readonly ZoomPanManager _zoomPan = new();
@@ -318,6 +324,7 @@ namespace VilsSharpX
                 _pausedA = null;
                 _pausedB = null;
                 _pausedD = null;
+                _pausedMatchedA = null;
             }
             ResetSyncState();
 
@@ -390,6 +397,7 @@ namespace VilsSharpX
                 _pausedA = null;
                 _pausedB = null;
                 _pausedD = null;
+                _pausedMatchedA = null;
             }
         }
 
@@ -760,19 +768,24 @@ namespace VilsSharpX
             if (!_playback.IsRunning)
                 return;
 
-            // Keep latest A frame in sync with the live AVTP callback frame so RenderAll
-            // always uses fresh AVTP content in pane A.
+            // Always keep the sync ring populated so B frames arriving after resume
+            // can find the correct matching A (CANoe keeps sending during pause).
             if (frame != null && frame.Length == _currentWidth * _currentHeight)
             {
                 try
                 {
                     var aLive = new Frame(_currentWidth, _currentHeight, frame,
                         _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
-                    lock (_frameLock)
-                    {
-                        _latestA = aLive;
-                    }
                     PushSyncFrame(aLive);
+
+                    // Don't update display state while paused — panes are frozen.
+                    if (!_playback.IsPaused)
+                    {
+                        lock (_frameLock)
+                        {
+                            _latestA = aLive;
+                        }
+                    }
                 }
                 catch
                 {
@@ -1079,6 +1092,14 @@ namespace VilsSharpX
 
             // Status text is now shown only in Frame Statistics, no need to duplicate here
 
+            // During pause: keep sync matching alive (ring buffer + _matchedAForDiff)
+            // so B frames still find the correct A. But don't update _latestB or render.
+            if (_playback.IsPaused)
+            {
+                _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
+                return;
+            }
+
             // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
             {
@@ -1135,7 +1156,7 @@ namespace VilsSharpX
             BitmapUtils.Blit(_wbD, _diffBgr, w * 3);
 
             if (LblDiffStats != null)
-                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels);
+                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels, _lastMatchNcc);
 
             ApplyNoSignalUiState(noSignal: false);
         }
@@ -1470,15 +1491,29 @@ namespace VilsSharpX
             {
                 _pausedA = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
 
-                if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+                bool ethActive = _nichiaEthCapture != null
+                                 && _nichiaEthCapture.IsCapturing
+                                 && _nichiaEthCapture.FramesCompleted > 0;
+
+                if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && ethActive && _latestB != null)
                 {
-                    // In AVTP Live mode, B is derived from A using the UI delta; D is derived from (B-A).
+                    // Real ETH LVDS: freeze the actual B from Ethernet and use
+                    // the sync-matched A for the diff so D reflects real ECU differences.
+                    _pausedB = _latestB;
+                    _pausedMatchedA = _matchedAForDiff ?? _pausedA;
+                    _pausedD = AbsDiff(_pausedMatchedA, _pausedB);
+                }
+                else if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor)
+                {
+                    // Fallback (no ETH frames yet): mock B = A + delta
                     _pausedB = new Frame(_currentWidth, _currentHeight, ApplyValueDelta(_pausedA.Data, _bValueDelta), _pausedA.TimestampUtc);
+                    _pausedMatchedA = _pausedA;
                     _pausedD = AbsDiff(_pausedA, _pausedB);
                 }
                 else
                 {
                     _pausedB = _latestB ?? _pausedA;
+                    _pausedMatchedA = _pausedA;
                     _pausedD = _latestD ?? AbsDiff(_pausedA, _pausedB);
                 }
             }
@@ -1500,11 +1535,16 @@ namespace VilsSharpX
             _playback.Resume();
             _playback.PauseGate.Set();
 
+            // Don't clear the sync ring on resume — it contains valid A frames
+            // pushed during pause that correspond to B frames still in the ECU pipeline.
+            _matchedAForDiff = null;
+
             lock (_frameLock)
             {
                 _pausedA = null;
                 _pausedB = null;
                 _pausedD = null;
+                _pausedMatchedA = null;
             }
 
             if (BtnStart != null) BtnStart.Content = "Pause";
@@ -2010,6 +2050,7 @@ namespace VilsSharpX
                     _pausedA = a;
                     _pausedB = b;
                     _pausedD = d;
+                    _pausedMatchedA = a;
                 }
             }
 
@@ -2252,15 +2293,14 @@ namespace VilsSharpX
             //   - If LVDS capture is active and has a frame, use the real LVDS data for B
             //   - Otherwise, derive B from A using the UI delta (mock LVDS)
             // Snapshot the matched-A reference ONCE to avoid race with HandleLvdsFrameReady.
-            var matchedA = _matchedAForDiff;
-            bool hasRealEthB = false;
+            // When paused, use the frozen _pausedMatchedA that was saved at pause time.
+            var matchedA = _playback.IsPaused ? _pausedMatchedA : _matchedAForDiff;
+            bool hasRealEthB = _nichiaEthCapture != null
+                               && _nichiaEthCapture.IsCapturing
+                               && _nichiaEthCapture.FramesCompleted > 0;
 
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
-                hasRealEthB = _nichiaEthCapture != null
-                              && _nichiaEthCapture.IsCapturing
-                              && _nichiaEthCapture.FramesCompleted > 0;
-
                 if (hasRealEthB)
                 {
                     // B already comes from HandleLvdsFrameReady() via _latestB.
@@ -2280,7 +2320,10 @@ namespace VilsSharpX
             }
 
             // B post-processing (forced dead pixel + optional compensation)
-            b = ApplyBPostProcessing(a, b);
+            // Use the sync-matched A when available so dark-pixel detection
+            // aligns with the same A reference used for the diff comparison.
+            Frame aForPostProcess = (hasRealEthB && matchedA != null) ? matchedA : a;
+            b = ApplyBPostProcessing(aForPostProcess, b);
 
             // For diff rendering, use the matched A frame (sync-corrected) when ETH B is active,
             // so the comparison reflects actual ECU processing differences, not animation timing.
@@ -2304,7 +2347,7 @@ namespace VilsSharpX
             }
 
             if (LblDiffStats != null)
-                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels);
+                LblDiffStats.Text = StatusFormatter.FormatDiffStats(maxDiff, minDiff, meanAbsDiff, aboveDeadband, totalDarkPixels, _lastMatchNcc);
 
             // Per-pane no-signal: when AVTP hasn't arrived but ETH pane B is valid,
             // show "Signal not available" only on pane A.
@@ -2393,37 +2436,166 @@ namespace VilsSharpX
         {
             int idx = Interlocked.Increment(ref _syncRingHead) & (SyncRingSize - 1);
             _syncRing[idx] = a;
+
+            // Pre-compute per-pixel variance for instant flat-frame lookups.
+            var data = a.Data;
+            int n = data.Length;
+            long sum = 0, sumSq = 0;
+            for (int j = 0; j < n; j++)
+            {
+                int v = data[j];
+                sum += v;
+                sumSq += (long)v * v;
+            }
+            _syncRingVarPerPx[idx] = ((double)n * sumSq - (double)sum * sum) / ((double)n * n);
         }
 
         /// <summary>
         /// Finds the A frame in the sync ring buffer that best matches the given
-        /// B frame pixel data.  Compares ALL pixels for reliable matching even
-        /// with smooth animations (e.g. sweeping bar).  Cost: ~3.3 M byte-ops
-        /// per call at 320×80 × 128 entries — sub-millisecond on modern CPUs.
+        /// B frame pixel data.  Uses Normalized Cross-Correlation (NCC) as the
+        /// matching metric.  NCC is invariant to both additive and multiplicative
+        /// brightness transforms (e.g. ECU thermal derating where B ≈ k·A + c),
+        /// so it stays near 1.0 for the correct match regardless of derating level.
+        ///
+        /// NCC = cov(A,B) / (σA · σB), computed in one pass as:
+        ///   (N·ΣAB − ΣA·ΣB) / √((N·ΣA² − (ΣA)²)(N·ΣB² − (ΣB)²))
+        ///
+        /// When B has very low variance (uniform frame, no bar/structure), NCC is
+        /// numerically unstable (0/0).  In that case we skip the correlation and
+        /// return the most recent A frame from the ring, which is always correct
+        /// because when B has no structure, A has already transitioned to no
+        /// structure as well (A leads B by the ECU round-trip latency).
+        ///
+        /// Cost: ~5.3 M int-ops per call at 256×64 × 128 entries — sub-ms.
         /// </summary>
         private Frame? FindBestMatchA(byte[] bData, int expectedLen)
         {
             if (expectedLen == 0) return null;
+
+            // Pre-compute B statistics (constant across all A candidates).
+            long bSum = 0;
+            long bSumSq = 0;
+            for (int j = 0; j < expectedLen; j++)
+            {
+                int b = bData[j];
+                bSum += b;
+                bSumSq += (long)b * b;
+            }
+            double bNVar = (double)expectedLen * bSumSq - (double)bSum * bSum;
+
+            // ── Flat-B shortcut ──────────────────────────────────────────────
+            // Per-pixel variance = bNVar / N².  When std-dev < 5 gray levels
+            // the frame has no meaningful spatial structure (no bar/pattern).
+            // NCC would degenerate to noise/noise → random results that may
+            // pick an old A frame with a bar still in the ring.  Instead, use
+            // the most recent A directly.
+            const double FlatStdDevThreshold = 5.0;
+            double bVarPerPixel = bNVar / ((double)expectedLen * expectedLen);
+            if (bVarPerPixel < FlatStdDevThreshold * FlatStdDevThreshold)
+            {
+                // B is flat → find the most recent A that is ALSO flat.
+                // This avoids picking a latest-A that already has the bar
+                // (A leads B by ECU latency) when B hasn't shown it yet.
+                _lastMatchNcc = 1.0; // no structure → trivially matched
+                return GetMostRecentFlatSyncFrame(expectedLen, FlatStdDevThreshold * FlatStdDevThreshold);
+            }
+
+            // ── Full NCC matching for structured frames ──────────────────────
             Frame? best = null;
-            long bestScore = long.MaxValue;
+            double bestNcc = double.MinValue;
 
             for (int i = 0; i < SyncRingSize; i++)
             {
                 var f = _syncRing[i];
                 if (f == null || f.Data.Length != expectedLen) continue;
 
-                long score = 0;
                 var aData = f.Data;
+                long aSum = 0;
+                long aSumSq = 0;
+                long abSum = 0;
                 for (int j = 0; j < expectedLen; j++)
-                    score += Math.Abs(bData[j] - aData[j]);
-
-                if (score < bestScore)
                 {
-                    bestScore = score;
+                    int a = aData[j];
+                    aSum += a;
+                    aSumSq += (long)a * a;
+                    abSum += (long)a * bData[j];
+                }
+
+                double aNVar = (double)expectedLen * aSumSq - (double)aSum * aSum;
+
+                double ncc;
+                if (aNVar < 1.0)
+                {
+                    // A is constant but B has structure → no meaningful correlation.
+                    // Penalize so we prefer an A that also has structure.
+                    ncc = -1.0;
+                }
+                else
+                {
+                    double covN = (double)expectedLen * abSum - (double)aSum * bSum;
+                    ncc = covN / Math.Sqrt(aNVar * bNVar);
+                }
+
+                if (ncc > bestNcc)
+                {
+                    bestNcc = ncc;
                     best = f;
                 }
             }
+
+            // ── Quality gate ─────────────────────────────────────────────────
+            // If the best NCC is still poor (< 0.5), the match is unreliable.
+            // Fall back to the most recent A as a safe default.
+            if (bestNcc < 0.5)
+            {
+                var recent = GetMostRecentSyncFrame(expectedLen);
+                if (recent != null)
+                {
+                    _lastMatchNcc = bestNcc; // report actual NCC for diagnostics
+                    return recent;
+                }
+            }
+
+            _lastMatchNcc = (bestNcc > double.MinValue) ? bestNcc : double.NaN;
             return best;
+        }
+
+        /// <summary>
+        /// Returns the most recently pushed A frame from the sync ring buffer.
+        /// </summary>
+        private Frame? GetMostRecentSyncFrame(int expectedLen)
+        {
+            int head = _syncRingHead;
+            for (int k = 0; k < SyncRingSize; k++)
+            {
+                int idx = (head - k) & (SyncRingSize - 1);
+                var f = _syncRing[idx];
+                if (f != null && f.Data.Length == expectedLen)
+                    return f;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the most recently pushed A frame whose per-pixel variance
+        /// is below <paramref name="varThreshold"/>, i.e. also a flat frame.
+        /// Falls back to the most recent frame of any variance if no flat A
+        /// is found (ring fully populated with structured frames).
+        /// </summary>
+        private Frame? GetMostRecentFlatSyncFrame(int expectedLen, double varThreshold)
+        {
+            int head = _syncRingHead;
+            Frame? fallback = null;
+            for (int k = 0; k < SyncRingSize; k++)
+            {
+                int idx = (head - k) & (SyncRingSize - 1);
+                var f = _syncRing[idx];
+                if (f == null || f.Data.Length != expectedLen) continue;
+                fallback ??= f; // remember most recent regardless of variance
+                if (_syncRingVarPerPx[idx] < varThreshold)
+                    return f;
+            }
+            return fallback;
         }
 
         /// <summary>
@@ -2432,8 +2604,10 @@ namespace VilsSharpX
         private void ResetSyncState()
         {
             Array.Clear(_syncRing);
+            Array.Clear(_syncRingVarPerPx);
             _syncRingHead = 0;
             _matchedAForDiff = null;
+            _lastMatchNcc = double.NaN;
         }
 
         private void ImgA_MouseMove(object sender, MouseEventArgs e) => ShowPixelInfo(e, GetDisplayedFrameForPane(Pane.A), LblA);
