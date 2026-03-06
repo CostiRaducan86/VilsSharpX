@@ -1,3 +1,9 @@
+/*******************************************************************************
+ * RETIRED: This file is replaced by frame_eth.c (unified Nichia + Osram TX).
+ * Kept for reference.  Excluded from build via #if 0.
+ ******************************************************************************/
+#if 0 /* ── replaced by frame_eth.c ── */
+
 /******************************************************************************
  * nichia_eth.c — Nichia Frame over Ethernet (NFE)
  *
@@ -485,3 +491,5 @@ boolean nichia_eth_send_pending(void)
     g_nfeStats.framesSent++;
     return TRUE;
 }
+
+#endif /* replaced by frame_eth.c */

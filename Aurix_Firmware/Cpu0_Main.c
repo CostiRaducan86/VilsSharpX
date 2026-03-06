@@ -31,7 +31,7 @@
 
 /******************************************************************************
  * \file Cpu0_Main.c
- * \brief ASCLIN9 RX @ P14.7 (Nichia 12.5 Mbps) + FPS via STM0
+ * \brief ASCLIN9 RX @ P14.7 (Nichia / Osram dual-device) + FPS via STM0
  ******************************************************************************/
 
 #include "Ifx_Types.h"
@@ -41,7 +41,9 @@
 
 #include "asclin9_dma.h"
 #include "rxmon.h"
-#include "nichia_eth.h"
+#include "osram_frame.h"
+#include "frame_eth.h"
+#include "device_mode.h"
 
 /* STM timing */
 #include "Stm/Std/IfxStm.h"
@@ -90,10 +92,13 @@ static void fps_update(void)
     }
 }
 
-/* User callback: feed rxmon parser (called from main loop) */
+/* User callback: feed appropriate parser based on device mode */
 static void consume_dma_buffer(const uint8 *data, uint32 len)
 {
-    rxmon_feed(data, len);
+    if (device_mode_get() == FE_DEVICE_OSRAM)
+        osram_frame_feed(data, len);
+    else
+        rxmon_feed(data, len);
 }
 
 void core0_main(void)
@@ -103,11 +108,11 @@ void core0_main(void)
     IfxScuWdt_disableSafetyWatchdog(IfxScuWdt_getSafetyWatchdogPassword());
     IfxCpu_enableInterrupts();
 
-    /* Start ASCLIN9 @ 12.5 Mbaud with DMA + dual buffer */
-    asclin9_dma_init(12500000u, Frame_8N1);
-
-    /* Initialise GETH for Nichia frame Ethernet TX */
-    nichia_eth_init();
+    /* ── Device mode selection ──
+     * Change to FE_DEVICE_OSRAM for Osram (20 Mbaud, 8O1, 320×80).
+     * This configures ASCLIN9, parsers, and GETH all in one call.
+     */
+    device_mode_init(FE_DEVICE_OSRAM);
 
     /* FPS */
     fps_init();
@@ -118,12 +123,12 @@ void core0_main(void)
         uint8 *completed = asclin9_dma_get_completed_buffer();
         if (completed != NULL_PTR)
         {
-            /* Feed the parser (non-blocking copy) */
+            /* Feed the appropriate parser (Nichia rxmon or Osram frame parser) */
             consume_dma_buffer(completed, ASCLIN9_DMA_BUFFER_SIZE);
         }
 
-        /* Send assembled Nichia frame over Ethernet (if ready) */
-        nichia_eth_send_pending();
+        /* Send assembled frame over Ethernet (if ready) */
+        frame_eth_send_pending();
 
         /* Update FPS once per second */
         fps_update();

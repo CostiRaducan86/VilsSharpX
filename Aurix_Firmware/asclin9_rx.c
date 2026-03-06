@@ -1,3 +1,13 @@
+/*******************************************************************************
+ * RETIRED: This ISR-based ASCLIN9 driver is replaced by asclin9_dma.c
+ * (DMA-based dual-buffer).  Kept for reference.  Excluded from build via #if 0.
+ *
+ * If this file is compiled, its ISR handlers (priorities 14, 15) register in
+ * the IVT and reference an uninitialised g_asc9 handle.  Any spurious
+ * interrupt at those priorities would dereference NULL → bus error trap.
+ ******************************************************************************/
+#if 0 /* ── replaced by asclin9_dma.c ── */
+
 #include "IfxAsclin_Asc.h"
 #include "IfxAsclin_PinMap.h"
 #include "IfxAsclin.h"              /* pentru IfxAsclin_enableAscErrorFlags */
@@ -166,3 +176,5 @@ void asclin9_consume_ready_buffers(void (*consume)(const uint8 *data, uint32 len
         consume(chunk, (uint32)toRead);
     }
 }
+
+#endif /* #if 0 — replaced by asclin9_dma.c */

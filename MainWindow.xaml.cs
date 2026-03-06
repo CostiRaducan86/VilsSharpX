@@ -139,8 +139,9 @@ namespace VilsSharpX
         // LVDS capture manager
         private LvdsLiveManager _lvdsManager = null!;
 
-        // Nichia Ethernet capture (Aurix GETH → raw ethertype 0x88B5)
+        // Ethernet capture from Aurix GETH → raw ethertype 0x88B5 (pane B)
         private NichiaEthCapture? _nichiaEthCapture;
+        private OsramEthCapture? _osramEthCapture;
 
         private Frame? _latestA;
         private Frame? _latestB;
@@ -294,6 +295,7 @@ namespace VilsSharpX
             try { _liveCapture?.Dispose(); } catch { /* ignore */ }
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
             try { StopNichiaEthCapture(); } catch { /* ignore */ }
+            try { StopOsramEthCapture(); } catch { /* ignore */ }
             try { _aviPlayer?.Dispose(); } catch { /* ignore */ }
 
             InitializeResolutionDependentObjects();
@@ -360,6 +362,10 @@ namespace VilsSharpX
             if (_nichiaEthCapture != null
                 && _nichiaEthCapture.IsCapturing
                 && _nichiaEthCapture.FramesCompleted > 0)
+                return false;
+            if (_osramEthCapture != null
+                && _osramEthCapture.IsCapturing
+                && _osramEthCapture.FramesCompleted > 0)
                 return false;
 
             // In AVTP Live mode, keep panes in "Signal not available" until first valid frame arrives.
@@ -1037,23 +1043,17 @@ namespace VilsSharpX
 
         private void BtnRefreshNics_Click(object sender, RoutedEventArgs e) => RefreshLiveNicList();
 
-        // ── Nichia Ethernet Capture (Aurix GETH → pane B) ──────────────
+        // ── LVDS Ethernet Capture (Aurix GETH → pane B) ──────────────
 
         private void StartNichiaEthCapture()
         {
             try
             {
-                // If already capturing via Ethernet, stop first
                 StopNichiaEthCapture();
-
-                // Use the same NIC as the AVTP live capture (pane A);
-                // the user can change the NIC via the existing NIC dropdown.
                 string? nicHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
-
                 _nichiaEthCapture = NichiaEthCapture.Start(nicHint, AppendDiagLog);
                 _nichiaEthCapture.OnFrameReady += (frame, meta) =>
                     Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
-
                 AppendDiagLog("[nfe] Nichia Ethernet capture started");
             }
             catch (Exception ex)
@@ -1072,12 +1072,39 @@ namespace VilsSharpX
             }
         }
 
+        private void StartOsramEthCapture()
+        {
+            try
+            {
+                StopOsramEthCapture();
+                string? nicHint = _nicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
+                _osramEthCapture = OsramEthCapture.Start(nicHint, AppendDiagLog);
+                _osramEthCapture.OnFrameReady += (frame, meta) =>
+                    Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+                AppendDiagLog("[ofe] Osram Ethernet capture started");
+            }
+            catch (Exception ex)
+            {
+                AppendDiagLog($"[ofe] Ethernet capture error: {ex.Message}");
+            }
+        }
+
+        private void StopOsramEthCapture()
+        {
+            if (_osramEthCapture != null)
+            {
+                _osramEthCapture.Dispose();
+                _osramEthCapture = null;
+                AppendDiagLog("[ofe] Osram Ethernet capture stopped");
+            }
+        }
+
         private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
         {
             // Guard: reject stale callbacks that arrive via Dispatcher.BeginInvoke
             // after Stop has been pressed.
-            // Without this, queued callbacks re-render the last frame over "No Signal".
-            bool ethActive = _nichiaEthCapture != null && _nichiaEthCapture.IsCapturing;
+            bool ethActive = (_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing)
+                          || (_osramEthCapture != null && _osramEthCapture.IsCapturing);
             if (!ethActive)
                 return;
 
@@ -1087,7 +1114,7 @@ namespace VilsSharpX
             LblLvdsSyncLoss.Text = $"Sync_error: {meta.SyncLosses}  CRC_error: {meta.CrcErrors}  Parity_error: {meta.ParityErrors}";
 
             // FPS from Ethernet capture
-            double fps = _nichiaEthCapture?.FpsEma ?? 0;
+            double fps = _nichiaEthCapture?.FpsEma ?? _osramEthCapture?.FpsEma ?? 0;
             LblLvdsFps.Text = $"FPS: {fps:F1}";
 
             // Status text is now shown only in Frame Statistics, no need to duplicate here
@@ -1100,16 +1127,15 @@ namespace VilsSharpX
                 return;
             }
 
+            // Find best-matching A frame BEFORE storing B, so that Pause()
+            // captures a consistent (B, matchedA) pair inside the frame lock.
+            _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
+
             // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
             {
                 _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
             }
-
-            // Find best-matching A frame for synchronized diff comparison.
-            // B arrives with ECU round-trip delay; pixel-sampling picks the A
-            // that was originally sent and passed through the ECU.
-            _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
 
             // When the main playback loop is NOT running (user didn't press Start),
             // render LVDS frame directly on pane B (standalone LVDS capture mode).
@@ -1167,10 +1193,24 @@ namespace VilsSharpX
             var cfg = LvdsProtocol.GetUartConfig(_currentDeviceType);
             string parityStr = cfg.Parity == System.IO.Ports.Parity.None ? "N" :
                                cfg.Parity == System.IO.Ports.Parity.Odd ? "O" : "E";
+
+            string frameLine;
+            if (_currentDeviceType == LsmDeviceType.Nichia)
+            {
+                // Nichia: per-line LVDS packets
+                frameLine = $"Line: [0x5D][row][{cfg.FrameWidth}px][CRC{cfg.CrcLen * 8}] = {cfg.LinePacketLen} B";
+            }
+            else
+            {
+                // Osram: complete frame packets (header + pixels + CRC32)
+                int frameBytes = 4 + cfg.FrameWidth * cfg.ActiveHeight + 4; // 0x80,0xA5,0xAA,0x55 + 25600px + CRC32
+                frameLine = $"Frame: [0x80,0xA5,0xAA,0x55][{cfg.FrameWidth * cfg.ActiveHeight}px][CRC32] = {frameBytes} B";
+            }
+
             LblLvdsProtocol.Text = $"Protocol: {_currentDeviceType.GetDisplayName()}\n" +
                                    $"Baud: {cfg.BaudRate:N0} bps | {cfg.DataBits}{parityStr}1 | LSB-first\n" +
-                                   $"Line: [0x5D][row][{cfg.FrameWidth}px][CRC{cfg.CrcLen*8}] = {cfg.LinePacketLen} B\n" +
-                                   $"Frame: {cfg.ActiveHeight} lines → rezolution {cfg.FrameWidth}×{cfg.ActiveHeight}";
+                                   $"{frameLine}\n" +
+                                   $"Frame: {cfg.ActiveHeight} lines = resolution {cfg.FrameWidth}×{cfg.ActiveHeight}";
         }
 
         /// <summary>
@@ -1315,6 +1355,7 @@ namespace VilsSharpX
             if (_recordingManager.IsRecording) StopRecording();
             StopAll();
             try { StopNichiaEthCapture(); } catch { /* ignore */ }
+            try { StopOsramEthCapture(); } catch { /* ignore */ }
             try { _lvdsManager?.Dispose(); } catch { /* ignore */ }
         }
 
@@ -1491,9 +1532,8 @@ namespace VilsSharpX
             {
                 _pausedA = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
 
-                bool ethActive = _nichiaEthCapture != null
-                                 && _nichiaEthCapture.IsCapturing
-                                 && _nichiaEthCapture.FramesCompleted > 0;
+                bool ethActive = (_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FramesCompleted > 0)
+                              || (_osramEthCapture != null && _osramEthCapture.IsCapturing && _osramEthCapture.FramesCompleted > 0);
 
                 if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && ethActive && _latestB != null)
                 {
@@ -1794,10 +1834,13 @@ namespace VilsSharpX
             }
 
             // Pane B real LVDS over Ethernet (Aurix GETH), managed by Start/Stop.
-            // Use it for Nichia in both AVTP Live and Generator/Player modes.
             if (_currentDeviceType == LsmDeviceType.Nichia)
             {
                 StartNichiaEthCapture();
+            }
+            else
+            {
+                StartOsramEthCapture();
             }
             
         }
@@ -1868,6 +1911,7 @@ namespace VilsSharpX
             // Stop all live capture sources
             _liveCapture.StopAll();
             StopNichiaEthCapture();
+            StopOsramEthCapture();
 
             // Ensure we don't remain paused after stopping.
             _playback.PauseGate.Set();
@@ -2295,9 +2339,8 @@ namespace VilsSharpX
             // Snapshot the matched-A reference ONCE to avoid race with HandleLvdsFrameReady.
             // When paused, use the frozen _pausedMatchedA that was saved at pause time.
             var matchedA = _playback.IsPaused ? _pausedMatchedA : _matchedAForDiff;
-            bool hasRealEthB = _nichiaEthCapture != null
-                               && _nichiaEthCapture.IsCapturing
-                               && _nichiaEthCapture.FramesCompleted > 0;
+            bool hasRealEthB = (_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FramesCompleted > 0)
+                            || (_osramEthCapture != null && _osramEthCapture.IsCapturing && _osramEthCapture.FramesCompleted > 0);
 
             if (_modeOfOperation == ModeOfOperation.AvtpLiveMonitor && !_playback.IsPaused)
             {
@@ -2398,6 +2441,8 @@ namespace VilsSharpX
                 {
                     if (_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FpsEma > 0.0)
                         paneBFps = _nichiaEthCapture.FpsEma;
+                    else if (_osramEthCapture != null && _osramEthCapture.IsCapturing && _osramEthCapture.FpsEma > 0.0)
+                        paneBFps = _osramEthCapture.FpsEma;
                     else if (_lvdsManager.IsCapturing && _lvdsManager.FpsEma > 0.0)
                         paneBFps = _lvdsManager.FpsEma;
                     else

@@ -1,5 +1,5 @@
 #include "rxmon.h"
-#include "nichia_eth.h"
+#include "frame_eth.h"
 
 /* ==================== Internal state ==================== */
 static uint8  s_buf[RXMON_FRAME_LEN_BYTES];
@@ -173,7 +173,7 @@ void rxmon_feed(const uint8 *data, uint32 len)
                 g_rxmon.lastRowIndex = s_row;
 
                 /* ── Push validated row to Ethernet frame assembler ── */
-                nichia_eth_push_row(s_row, &s_buf[2]);
+                frame_eth_push_nichia_row(s_row, &s_buf[2]);
 
                 /* snapshots (optional) */
                 for (uint32 k = 0; k < RXMON_FRAME_LEN_BYTES; k++)

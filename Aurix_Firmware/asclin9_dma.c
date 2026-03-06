@@ -44,30 +44,63 @@ static IfxAsclin_Asc g_asc9;
  */
 IFX_INTERRUPT(ASCLIN9_DMA_ISR, 0, ASCLIN9_DMA_ISR_PRIO)
 {
-    /* 1. Clear channel interrupt flag */
-    IfxDma_Dma_clearChannelInterrupt(&g_asclin9_dma.dmaChannel);
+    /*
+     * All DMA SFR writes use .U (32-bit word access).
+     * TASKING at -O0 compiles bitfield (.B.) access to st.b (byte store).
+     * AURIX DMA SFRs reject byte writes → DSE trap.
+     *
+     * Single-shot mode: on TCOUNT=0 the channel auto-disables (DCH set).
+     * We must re-arm: write DADR, then set ECH to reload TCOUNT from TREL
+     * and re-enable hardware requests.  Bytes arriving during re-arm are
+     * buffered in the ASCLIN 16-byte RX FIFO.
+     *
+     * With .U (32-bit) writes, re-arm takes ~400 ns.
+     * At 20 Mbaud (0.5 µs/byte) the FIFO covers ~32 µs → no byte loss.
+     *
+     * NOTE: SHCT=11 (double-destination-buffering) was previously tried
+     * but the HW swap exchanges the END-of-transfer DADR (not start),
+     * causing address drift and buffer overflow into RAM variables.
+     */
+    volatile Ifx_DMA_CH *ch = &MODULE_DMA.CH[ASCLIN9_DMA_CHANNEL_ID];
 
-    /* 2. Identify which buffer just completed */
-    uint8 *old_dest = g_asclin9_dma.pCurrentDest;
+    /* 1. Determine next buffer (before any SFR writes) */
+    uint8 *completed;
+    uint8 *nextDest;
 
-    if (old_dest == g_asclin9_dma.bufferA)
+    if (g_asclin9_dma.pCurrentDest == g_asclin9_dma.bufferA)
     {
-        g_asclin9_dma.pCurrentDest     = g_asclin9_dma.bufferB;
-        g_asclin9_dma.pCompletedBuffer = g_asclin9_dma.bufferA;
+        completed = g_asclin9_dma.bufferA;
+        nextDest  = g_asclin9_dma.bufferB;
     }
     else
     {
-        g_asclin9_dma.pCurrentDest     = g_asclin9_dma.bufferA;
-        g_asclin9_dma.pCompletedBuffer = g_asclin9_dma.bufferB;
+        completed = g_asclin9_dma.bufferB;
+        nextDest  = g_asclin9_dma.bufferA;
     }
 
-    /* 3. Re-program DMA for the next buffer */
-    IfxDma_Dma_setChannelDestinationAddress(&g_asclin9_dma.dmaChannel,
-                                            (uint32)g_asclin9_dma.pCurrentDest);
-    IfxDma_Dma_setChannelTransferCount(&g_asclin9_dma.dmaChannel,
-                                       ASCLIN9_DMA_BUFFER_SIZE);
+    /* 2. Write new destination address (channel is idle, TCOUNT=0) */
+    ch->DADR.U = (uint32)nextDest;
 
-    /* 4. Bump completion counter */
+    /* 3. Re-enable hardware request → loads TCOUNT from TREL, starts DMA.
+     *    Do this ASAP to minimise FIFO fill time. */
+    {
+        Ifx_DMA_TSR tsr;
+        tsr.U     = 0;
+        tsr.B.ECH = 1;
+        MODULE_DMA.TSR[ASCLIN9_DMA_CHANNEL_ID].U = tsr.U;
+    }
+
+    /* 4. Clear channel interrupt flag (after re-arm — not time-critical) */
+    {
+        Ifx_DMA_CH_CHCSR csr;
+        csr.U      = 0;
+        csr.B.CICH = 1;
+        ch->CHCSR.U = csr.U;
+    }
+
+    /* 5. Update tracking (not time-critical) */
+    g_asclin9_dma.pCurrentDest     = nextDest;
+    g_asclin9_dma.pCompletedBuffer = completed;
     g_asclin9_dma.completionCount++;
 }
 
@@ -146,7 +179,7 @@ static void asclin9_dma_configure(uint32 baud, Asclin9_FrameMode frameMode)
         .txMode    = IfxPort_OutputMode_pushPull,
         .pinDriver = IfxPort_PadDriver_cmosAutomotiveSpeed1
     };
-    cfg.pins = &pins;                                  /* pointer, not copy */
+    cfg.pins = &pins;
 
     /* SW buffers: iLLD needs something, but DMA does the actual work */
     static uint8 rxBufMem[64 + sizeof(Ifx_Fifo) + 8];
@@ -163,10 +196,11 @@ static void asclin9_dma_configure(uint32 baud, Asclin9_FrameMode frameMode)
     IfxAsclin_setFilterDepth(g_asc9.asclin, 2);
 
     /* --- Manual RX SRC → DMA routing (iLLD skipped because rxPriority=0) ---
-     * 1. Enable RFLE: ASCLIN sets RFL flag when RX FIFO fill ≥ level (=1 byte)
+     * 1. Enable RFLE: ASCLIN sets RFL flag when RX FIFO fill >= level (=1 byte)
      * 2. Route RX SRC to DMA channel (SRPN = channel ID, TOS = dma)
      * 3. Enable the SRC node
-     * Only RX is routed; TX SRC stays disabled (avoids infinite TFLE triggers). */
+     * Only RX is routed; TX SRC stays disabled (avoids infinite TFLE triggers).
+     */
     IfxAsclin_enableRxFifoFillLevelFlag(g_asc9.asclin, TRUE);
     {
         volatile Ifx_SRC_SRCR *rxSrc = IfxAsclin_getSrcPointerRx(g_asc9.asclin);
@@ -200,7 +234,7 @@ static void asclin9_dma_configure_channel(void)
 
     /* Source: ASCLIN9 RXDATA register (fixed peripheral address).
      * SCBE=1, CBLS=0 → "no modification of SADR after each DMA read move"
-     * (TC3xx User Manual, DMA.ADICR.CBLS = 0000b).                         */
+     * (TC3xx User Manual, DMA.ADICR.CBLS = 0000b). */
     chnCfg.sourceAddress                = (uint32)&MODULE_ASCLIN9.RXDATA.U;
     chnCfg.sourceCircularBufferEnabled  = TRUE;
     chnCfg.sourceAddressCircularRange   = IfxDma_ChannelIncrementCircular_none;
@@ -218,11 +252,17 @@ static void asclin9_dma_configure_channel(void)
 
     /* Hardware request: ASCLIN RX triggers one DMA transfer per byte */
     chnCfg.requestMode            = IfxDma_ChannelRequestMode_oneTransferPerRequest;
-    chnCfg.operationMode          = IfxDma_ChannelOperationMode_continuous;
+    chnCfg.operationMode          = IfxDma_ChannelOperationMode_single;
     chnCfg.hardwareRequestEnabled = TRUE;
     chnCfg.requestSource          = IfxDma_ChannelRequestSource_peripheral;
 
-    /* Shadow: not used (manual swap in ISR) */
+    /* Shadow: disabled.
+     * SHCT=11 (double-destination-buffering) was tried but the HW swap
+     * exchanges the END-of-transfer DADR with SHADR, not the start address.
+     * Without power-of-2 circular buffering (2560 ≠ 2^N), the destination
+     * drifts after each swap, overflowing into adjacent RAM variables.
+     * Single-shot + ISR re-arm is correct and fast enough with .U writes
+     * (~400 ns re-arm vs 8+ µs ASCLIN FIFO buffer at 20 Mbaud). */
     chnCfg.shadowControl = IfxDma_ChannelShadow_none;
 
     /* Channel completion interrupt → fires when TCOUNT reaches 0 */

@@ -41,6 +41,12 @@ typedef struct
     uint8 bufferA[ASCLIN9_DMA_BUFFER_SIZE];
     uint8 bufferB[ASCLIN9_DMA_BUFFER_SIZE];
 
+    /* Guard zone: absorbs any stray DMA writes past bufferB.
+     * With single-shot mode this should never happen, but the padding
+     * costs only 32 bytes and protects dmaHandle/dmaChannel from
+     * corruption in all edge cases. */
+    uint8 _guard[32];
+
     /* DMA resources */
     IfxDma_Dma          dmaHandle;
     IfxDma_Dma_Channel  dmaChannel;

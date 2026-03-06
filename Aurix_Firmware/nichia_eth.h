@@ -1,3 +1,9 @@
+/*******************************************************************************
+ * RETIRED: This header is replaced by frame_eth.h (unified Nichia + Osram TX).
+ * Kept for reference.  Excluded from build via #if 0 (no code references it).
+ ******************************************************************************/
+#if 0 /* ── replaced by frame_eth.h ── */
+
 #ifndef NICHIA_ETH_H
 #define NICHIA_ETH_H
 
@@ -101,3 +107,5 @@ void nichia_eth_push_row(uint8 row, const uint8 *pixels);
 boolean nichia_eth_send_pending(void);
 
 #endif /* NICHIA_ETH_H */
+
+#endif /* replaced by frame_eth.h */
