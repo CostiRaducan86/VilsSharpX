@@ -2152,13 +2152,11 @@ namespace VilsSharpX
                 _playback.IncrementCountA();
                 PushSyncFrame(a);
         
-                // B: prefer real Nichia Ethernet LVDS when available; otherwise simulated LVDS (A + delta)
+                // B: prefer real Ethernet LVDS when available; otherwise simulated LVDS (A + delta)
                 Frame b;
                 bool useRealEthB = false;
-                if (_currentDeviceType == LsmDeviceType.Nichia
-                    && _nichiaEthCapture != null
-                    && _nichiaEthCapture.IsCapturing
-                    && _nichiaEthCapture.FramesCompleted > 0)
+                if ((_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FramesCompleted > 0)
+                    || (_osramEthCapture != null && _osramEthCapture.IsCapturing && _osramEthCapture.FramesCompleted > 0))
                 {
                     lock (_frameLock)
                     {
