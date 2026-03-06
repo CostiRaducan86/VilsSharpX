@@ -55,6 +55,7 @@ typedef struct
     uint8           *pCurrentDest;      /**< Points to bufferA or bufferB (current DMA target) */
     volatile uint8  *pCompletedBuffer;  /**< Non-NULL when a buffer is ready for the parser */
     volatile uint32  completionCount;   /**< Total DMA buffer completions */
+    volatile uint32  missedBuffers;     /**< Buffers overwritten before consumer read (data loss) */
     uint32           timeoutWarnings;   /**< Consumer-lag warnings */
 } Asclin9Dma;
 
@@ -81,5 +82,6 @@ uint8* asclin9_dma_get_completed_buffer(void);
  */
 uint32 asclin9_dma_get_completion_count(void);
 uint32 asclin9_dma_get_timeout_warnings(void);
+uint32 asclin9_dma_get_missed_buffers(void);
 
 #endif /* ASCLIN9_DMA_H */

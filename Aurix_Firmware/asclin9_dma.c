@@ -100,6 +100,12 @@ IFX_INTERRUPT(ASCLIN9_DMA_ISR, 0, ASCLIN9_DMA_ISR_PRIO)
 
     /* 5. Update tracking (not time-critical) */
     g_asclin9_dma.pCurrentDest     = nextDest;
+    if (g_asclin9_dma.pCompletedBuffer != NULL_PTR)
+    {
+        /* Previous buffer was not consumed before this one completed.
+         * Data loss is unavoidable with dual buffers; count it for diagnostics. */
+        g_asclin9_dma.missedBuffers++;
+    }
     g_asclin9_dma.pCompletedBuffer = completed;
     g_asclin9_dma.completionCount++;
 }
@@ -301,6 +307,7 @@ void asclin9_dma_init(uint32 baud_bps, Asclin9_FrameMode frameMode)
     g_asclin9_dma.pCurrentDest     = g_asclin9_dma.bufferA;
     g_asclin9_dma.pCompletedBuffer = NULL_PTR;
     g_asclin9_dma.completionCount  = 0;
+    g_asclin9_dma.missedBuffers    = 0;
     g_asclin9_dma.timeoutWarnings  = 0;
 
     IfxCpu_enableInterrupts();
@@ -337,4 +344,9 @@ uint32 asclin9_dma_get_completion_count(void)
 uint32 asclin9_dma_get_timeout_warnings(void)
 {
     return g_asclin9_dma.timeoutWarnings;
+}
+
+uint32 asclin9_dma_get_missed_buffers(void)
+{
+    return g_asclin9_dma.missedBuffers;
 }

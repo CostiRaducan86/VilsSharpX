@@ -119,11 +119,12 @@ void core0_main(void)
 
     while (1)
     {
-        /* Check if DMA has filled a buffer */
-        uint8 *completed = asclin9_dma_get_completed_buffer();
-        if (completed != NULL_PTR)
+        /* Drain ALL completed DMA buffers before sending Ethernet.
+         * This prevents data loss when frame_eth_send_pending() takes
+         * longer than the DMA buffer fill time (~1.28 ms at 20 Mbaud). */
+        uint8 *completed;
+        while ((completed = asclin9_dma_get_completed_buffer()) != NULL_PTR)
         {
-            /* Feed the appropriate parser (Nichia rxmon or Osram frame parser) */
             consume_dma_buffer(completed, ASCLIN9_DMA_BUFFER_SIZE);
         }
 

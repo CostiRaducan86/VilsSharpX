@@ -356,7 +356,7 @@ namespace VilsSharpX
             if (!_playback.IsRunning) return false;
             if (_modeOfOperation != ModeOfOperation.AvtpLiveMonitor) return false;
 
-            // If Nichia Ethernet capture is active and already has frames,
+            // If Ethernet capture (Nichia or Osram) is active and already has frames,
             // pane B is valid — proceed with rendering even if AVTP (pane A)
             // hasn't arrived yet.  Pane A will show gray; B and D render normally.
             if (_nichiaEthCapture != null
@@ -1123,17 +1123,19 @@ namespace VilsSharpX
             // so B frames still find the correct A. But don't update _latestB or render.
             if (_playback.IsPaused)
             {
-                _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
+                var pauseMatch = FindBestMatchA(frame, _currentWidth * _currentHeight);
+                lock (_frameLock) { _matchedAForDiff = pauseMatch; }
                 return;
             }
 
-            // Find best-matching A frame BEFORE storing B, so that Pause()
-            // captures a consistent (B, matchedA) pair inside the frame lock.
-            _matchedAForDiff = FindBestMatchA(frame, _currentWidth * _currentHeight);
+            // Find best-matching A frame BEFORE storing B, then store both
+            // atomically under _frameLock so GeneratorLoopAsync always reads
+            // a consistent (B, matchedA) pair.
+            var matched = FindBestMatchA(frame, _currentWidth * _currentHeight);
 
-            // Always store LVDS frame for pane B (used by RenderAll when playback is active)
             lock (_frameLock)
             {
+                _matchedAForDiff = matched;
                 _latestB = new Frame(_currentWidth, _currentHeight, frame, DateTime.UtcNow);
             }
 
@@ -2155,6 +2157,7 @@ namespace VilsSharpX
                 // B: prefer real Ethernet LVDS when available; otherwise simulated LVDS (A + delta)
                 Frame b;
                 bool useRealEthB = false;
+                Frame? genMatchedA = null;
                 if ((_nichiaEthCapture != null && _nichiaEthCapture.IsCapturing && _nichiaEthCapture.FramesCompleted > 0)
                     || (_osramEthCapture != null && _osramEthCapture.IsCapturing && _osramEthCapture.FramesCompleted > 0))
                 {
@@ -2165,6 +2168,7 @@ namespace VilsSharpX
                             && _latestB.Height == _currentHeight)
                         {
                             b = _latestB;
+                            genMatchedA = _matchedAForDiff;
                             useRealEthB = true;
                         }
                         else
@@ -2184,7 +2188,6 @@ namespace VilsSharpX
                     _playback.IncrementCountB();
         
                 // D: diff — use frame-matched A when real ETH B is active
-                var genMatchedA = _matchedAForDiff; // snapshot for thread safety
                 Frame diffA = (useRealEthB && genMatchedA != null) ? genMatchedA : a;
                 var d = AbsDiff(diffA, b);
         

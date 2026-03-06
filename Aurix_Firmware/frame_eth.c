@@ -370,7 +370,7 @@ void frame_eth_push_nichia_row(uint8 row, const uint8 *pixels)
     /* Detect new frame: row 0 → finalise previous frame if complete */
     if (row == 0)
     {
-        if (s_rowCount == FE_NICHIA_H)
+        if (s_rowCount == FE_NICHIA_H && !s_frameReady)
         {
             s_readyIdx   = s_assembleIdx;
             s_frameReady = TRUE;
