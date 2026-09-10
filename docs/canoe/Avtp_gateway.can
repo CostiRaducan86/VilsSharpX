@@ -12,14 +12,14 @@ variables
   //   Two possible causes (both fixed below):
   //   1) Gateway's own output() creates self-echo packets on the same bus.
   //   2) Another AVTP source (Avtp_new.can generator) also sends on Eth2.
-  //   Either way, multiple interleaved sources corrupt rxAssembly â€” some
+  //   Either way, multiple interleaved sources corrupt rxAssembly — some
   //   lines from source A, some from source B ? visible tearing/glitches.
   //
   // Fix: Gateway uses a DISTINCT source MAC (last byte 0x1A, not 0x19).
   //   RX handler ONLY accepts packets from C# app's MAC (0x19).
   //   This filters out both self-echo AND any CANoe generator node,
   //   since both use different MACs than the C# source.
-  //   Stream ID (bytes 4-11) UNCHANGED â€” ECU compatibility preserved.
+  //   Stream ID (bytes 4-11) UNCHANGED — ECU compatibility preserved.
 
   ethernetPacket myStream;
 
@@ -108,7 +108,7 @@ on start
   txFrameCount    = 0;
   txStaleCount    = 0;
 
-  // C# app sends with this source MAC â€” ONLY accept packets from this MAC
+  // C# app sends with this source MAC — ONLY accept packets from this MAC
   csharpSrcMac = EthGetMacAddressAsNumber("3C:CE:15:00:00:19");
 
   // Gateway retransmits with a DIFFERENT source MAC (last byte 0x1A)
@@ -159,7 +159,7 @@ on start
 
   myStream.byte(31) = 0x01;
 
-  // 10ms cadence â€” identical to Avtp_new.can (proven 100fps)
+  // 10ms cadence — identical to Avtp_new.can (proven 100fps)
   setTimerCyclic(txTimer, 0, 10);
 }
 
@@ -197,7 +197,7 @@ on ethernetPacket msgChannel2.*
   if (line0 < 0) return;
   if (line0 >= 80) return;
 
-  // Always assemble â€” keeps rxAssembly continuously up-to-date
+  // Always assemble — keeps rxAssembly continuously up-to-date
   srcOff = line0 * 320;
   for (i = 0; i < 1280; i++)
   {

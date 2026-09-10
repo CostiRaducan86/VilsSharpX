@@ -108,7 +108,7 @@ set; Direct Control Mode reuses it without changing the semantics.
 
 | Function | AURIX pin | X103 | LOCAL_J3 | Status |
 | --- | --- | --- | --- | --- |
-| LVDS TX to LSM | P02.2 (`IfxAsclin1_TX_P02_2_OUT`, alt2) | 15 | 4 | **Not configured yet** — new work |
+| LVDS TX to LSM | P02.2 (`IfxAsclin1_TX_P02_2_OUT`, alt2) | 15 | 4 | Configured in Direct Control Mode; ASCLIN1 TX via DMA channel 2 |
 | LVDS RX from ECU | P14.8 (ASCLIN1 RXD) | 7 | 3 | Configured (RX-only, DMA channel 1) |
 | CAN-UART to LSM | P00.9 TX / P00.12 RX (ASCLIN4) | 31 / 34 | 8 / 10 | Configured (bridge LSM side) |
 | CAN-UART to ECU | P00.7 TX / P00.6 RX (ASCLIN5) | 29 / 28 | 13 / 11 | Configured, **idle** in Direct Control Mode |
@@ -214,7 +214,7 @@ rules are:
 | ISR prio 11 / 12 | CAN-UART bridge ECU / LSM RX | unchanged |
 | ISR prio 13 | diagnostic | unchanged |
 | ISR prio 14 | ASCLIN1 RX DMA | unchanged |
-| ISR prio 15 | free | reserved for a future LVDS TX completion ISR, not used |
+| ISR prio 15 | free | Nichia row timer; TX completion remains polled |
 | ISR prio 20 | camera trigger | unchanged |
 | CPU0 | ASCLIN1, DMA, GETH, parsers | plus AVTP ingest + LVDS TX scheduling |
 | CPU1 | TFT UI | plus Direct Control Mode status display |
@@ -532,8 +532,9 @@ Setting it to 0 is also the fastest way to measure how much of the receive loss 
 mirror is responsible for: `g_avtpRxStats.framesIncomplete` is compared with the mirror
 on and off, with nothing else changed.
 
-The NICHIA loopback uses the row-based push and is added with the rest of the NICHIA
-support.
+The NICHIA loopback uses the row-based push: 64 rows are assembled into one 256x64
+frame and emitted with the `NI` fragment magic. The common Ethernet TX path also
+selects the Nichia geometry and fragment count when device mode is Nichia.
 
 ## 7. Data path 2 — CAN-UART master
 
@@ -692,15 +693,17 @@ and leave Direct Control Mode.
 | Command | ID | Direction | Purpose |
 | --- | --- | --- | --- |
 | `FE_CMD_SET_ADAPTER` | 0x03 | PC to AURIX | Existing; `ctrlMode = 1` now also arms the LVDS generator and CAN-UART master. |
-| `FE_CMD_DIRECT_LVDS_CFG` | 0x08 | PC to AURIX | Generator on/off, target fps, starvation policy, source (AVTP / test pattern), geometry rule, `LOCAL_RL_DET` level. |
-| `FE_CMD_DIRECT_CAN_SEQ` | 0x09 | PC to AURIX | Upload/start/stop a CAN-UART master request sequence. |
-| `FE_CMD_DIRECT_STATUS_REQ` | 0x0A | PC to AURIX | Request a telemetry snapshot packet. |
+| `FE_CMD_OSRAM_SEQ_STEP` | 0x08 | PC to AURIX | Stage one OSRAM CAN-UART Direct Control request. |
+| `FE_CMD_OSRAM_SEQ_COMMIT` | 0x09 | PC to AURIX | Commit the staged OSRAM startup sequence. |
+| `FE_CMD_NICHIA_SEQ_STEP` | 0x0A | PC to AURIX | Stage one Nichia CAN-UART Direct Control request. |
+| `FE_CMD_NICHIA_SEQ_COMMIT` | 0x0B | PC to AURIX | Commit the staged Nichia startup sequence. |
+| `FE_CMD_NICHIA_SEQ_HARDCODED` | 0x0C | PC to AURIX | Start the built-in Nichia startup table. |
 | `DS` status record | `0x4453` | AURIX to PC | Direct Control Mode telemetry: AVTP frames received/dropped, LVDS frames sent/repeated, TX underruns, CAN master transactions/timeouts. |
 
-The existing command IDs are `0x01`..`0x07`, so `0x08`..`0x0A` are free and are reserved
-here. Existing record magics are `NI`, `OS`, `CM` and `CD`, so `DS` (`0x4453`) does not
-collide. The numbering is fixed and must be kept identical in `frame_eth.h` and in the
-C# senders.
+The command IDs `0x08`..`0x0C` are allocated to trace-driven and built-in startup
+control. Existing record magics are `NI`, `OS`, `CM` and `CD`, so `DS` (`0x4453`) does
+not collide. The numbering is fixed and must be kept identical in `frame_eth.h` and
+in the C# senders.
 
 ## 9. Firmware module map
 
@@ -710,17 +713,17 @@ C# senders.
 | `lvds_frame_build.c/.h` | added | Convert a Gray8 frame into the OSRAM or NICHIA byte stream (header, CRC, row framing) and render the built-in test patterns. |
 | `avtp_rx.c/.h` | added | AVTP/RVF parsing and frame reassembly from GETH RX buffers, buffers in `dsram5`. |
 | `direct_mode.c/.h` | added | Direct Control Mode pixel path: AVTP frame to generator hand-off, pane B loopback policy, camera trigger source and telemetry. |
-| `can_uart_master.c/.h` | added | Replays the ECU diagnostic sequence on ASCLIN4 from CPU2: gap, request, echo filtering, response window, timeouts and locally generated `CD` records. |
+| `can_uart_master.c/.h` | added | Replays OSRAM or Nichia diagnostic sequences on ASCLIN4 from CPU2, with device-specific request/response lengths, timing, echo handling and locally generated `CD` records. |
 | `adapter_ctrl.c/.h` | changed | `adapter_ctrl_ttl_local_take_gpio()` re-claims `P02.2` as a GPIO driven HIGH when the transmitter releases it. |
 | `asclin1_dma.c/.h` | changed | `asclin1_dma_stop()` disarms the receive DMA and service request before the direction switch. |
-| `device_mode.c` | changed | A device switch while the transmitter is active reconfigures the transmitter instead of re-arming the receive DMA. |
+| `device_mode.c/.h` | changed | A device switch while the transmitter is active reconfigures baud/framing, parser state, Ethernet geometry and the transmitter instead of re-arming the receive DMA. |
 | `frame_eth.c` | changed | `SET_ADAPTER` arms the transmitter on entry and releases it before the selector returns to the ECU source. |
 | `Cpu0_Main.c` | changed | `lvds_tx_init()` at startup, `lvds_tx_tick()` in the loop, receive watchdog suppressed while transmitting. |
 | `frame_eth.c/.h` | changed | AVTP ethertype dispatch, receive length from `RDES3.PL`, 8 KB MTL RX FIFO, `frame_eth_set_pass_all_multicast()`, generator arming from `SET_ADAPTER`. |
 | `lvds_fault_inject.c/.h` | change | Direct-Mode-aware fault semantics (stop generator instead of switching selector). |
 | `camera_trigger.c/.h` | unchanged | Driven from `direct_mode` through the existing single-shot API. |
 | `Cpu2_Main.c` | change | Host the CAN-UART master scheduler tick. |
-| `tft_ui.c` | change | Show Direct Control Mode state and generator status. |
+| `tft_ui.c/.h` | change | Show Direct Control Mode state, generator status and centred Nichia 256x64 content. |
 
 ### 9.1 Transmitter activation in the current build
 

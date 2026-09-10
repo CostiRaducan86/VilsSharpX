@@ -9,10 +9,13 @@ variables
   ethernetPacket myStream;
   diagRequest PLUHD297_FL.ELC_LCHD_General_DEV_PresentValues_Read PresentDiag;
   mstimer myTimer;
+  mstimer myTimer2;
   //mstimer temptime;
   dword length=25600;
   byte counter = 1;
   byte headerCounter = 1;
+  int pack_nr = 1;
+  int staticImageReady = 0;
   
   byte streamData = 0;
   
@@ -538,7 +541,8 @@ on start
   @Canoe_Automation::grayValueNichia = 100;
 
   //setTimer(temptime,500);
-  setTimerCyclic(myTimer,0,10);
+  setTimerCyclic(myTimer,0,1);
+  setTimerCyclic(myTimer2,0,1);
   myStream.source = EthGetMacAddressAsNumber( "3C:CE:15:00:00:19" );
   myStream.destination = EthGetMacAddressAsNumber( "01:00:5E:16:00:12" );
   myStream.Length = 1312;
@@ -587,14 +591,9 @@ on key 't'
        diagSendRequest(PresentDiag);
       }
       
-on timer myTimer
+void sendAvtpPacket()
 {
-  int pack_nr = 1;
-  
   if (!AvtpNew_IsEnabled()) return;
-  
-  while(pack_nr <= BUFFER_NR)
-  {
   if(headerCounter == 1)
   {
     myStream.byte(1) = 0x81;
@@ -663,7 +662,7 @@ on timer myTimer
 
   if(changeLSM == 1)
   {
-    if(CHIP_TYPE == 0)
+    if(CHIP_TYPE == 0 && staticImageReady == 0)
     {
       // no btn pressed and only btn pressed is changeLSM set default image
       if(btnimg1 == 0 && btnimg2 == 0 && btnimg3 == 0 && btnimg4 == 0 && btnimg5 == 0 && btnOsramTestPic == 0)
@@ -719,7 +718,7 @@ on timer myTimer
         }
       }
      }
-    else 
+    else if (CHIP_TYPE != 0 && staticImageReady == 0)
     {
       if(btnimgNichia1 == 0 && btnimgNichia2 == 0 && btnimgNichia3 == 0 && btnNichiaTestPic == 0)
       {
@@ -793,6 +792,7 @@ on timer myTimer
         }
       }
     }
+    staticImageReady = 1;
  /*   else
     {
       for (j = 0; j < 25600; j++)
@@ -894,10 +894,22 @@ on timer myTimer
   }
   output(myStream);
   pack_nr++;
+  if (pack_nr > BUFFER_NR)
+  {
+    pack_nr = 1;
+  }
   counter++;
   //setTimer(myTimer,0,500*1000);
-  }
-  pack_nr = 1;
+}
+
+on timer myTimer
+{
+  sendAvtpPacket();
+}
+
+on timer myTimer2
+{
+  sendAvtpPacket();
 }
 
 on sysvar_change sysvar::PANELS::StartSteaming
@@ -952,6 +964,8 @@ on sysvar_change sysvar::PANELS::ChangeLSMmode
       //setTimer(myTimer, 1);
     //displayoff = 0;
     changeLSM = 1;
+    staticImageReady = 0;
+    pack_nr = 1;
     headerCounter = 1;
     counter = 1;
     framesentcnt = 0;
@@ -984,6 +998,7 @@ on sysvar_change sysvar::PANELS::ChangeLSMmode
 on sysvar_change sysvar::PANELS::Image1
 {
   if ((@PANELS::Image1 == 1) && (@PANELS::LsmDeviceType == 0)) {
+    staticImageReady = 0;
     
     btnimg2 = 0;
     btnimg3 = 0;
@@ -1014,6 +1029,7 @@ on sysvar_change sysvar::PANELS::Image1
 on sysvar_change sysvar::PANELS::Image2
 {
   if ((@PANELS::Image2 == 1) && (@PANELS::LsmDeviceType == 0)) {
+    staticImageReady = 0;
     
     btnimg1 = 0;
     btnimg3 = 0;
@@ -1044,6 +1060,7 @@ on sysvar_change sysvar::PANELS::Image2
 on sysvar_change sysvar::PANELS::Image3
 {
   if ((@PANELS::Image3 == 1) && (@PANELS::LsmDeviceType == 0)) {
+    staticImageReady = 0;
     
     btnimg1 = 0;
     btnimg2 = 0;
@@ -1074,6 +1091,7 @@ on sysvar_change sysvar::PANELS::Image3
 on sysvar_change sysvar::PANELS::gray20
 {  
     if ((@PANELS::gray20 == 1) && (@PANELS::ChangeLSMmode == 1) && (@PANELS::LsmDeviceType == 0)){
+  staticImageReady = 0;
       if (@Canoe_Automation::grayValueOsram == 0) {
         $CHLC_Container_01_ST3_DLS_HDR_Tunnel_Information_ST3::DLS_HDR_LgtDist_Dest_ST3 = 0;
       }
@@ -1124,6 +1142,7 @@ on sysvar_change sysvar::PANELS::gray20
 on sysvar_change sysvar::PANELS::OsramTest
 {
   if ((@PANELS::OsramTest == 1) && (@PANELS::LsmDeviceType == 0)) {
+    staticImageReady = 0;
     
     btnimg1 = 0;
     btnimg2 = 0;
@@ -1154,6 +1173,7 @@ on sysvar_change sysvar::PANELS::OsramTest
 on sysvar_change sysvar::PANELS::ImageNichia1
 {
   if ((@PANELS::ImageNichia1 == 1) && (@PANELS::LsmDeviceType == 1)) {
+    staticImageReady = 0;
     
     btnimg1 = 0;
     btnimg2 = 0;
@@ -1185,6 +1205,7 @@ on sysvar_change sysvar::PANELS::ImageNichia1
 on sysvar_change sysvar::PANELS::ImageNichia2
 {
   if ((@PANELS::ImageNichia2 == 1) && (@PANELS::LsmDeviceType == 1)) {
+    staticImageReady = 0;
     
     btnimg1 = 0;
     btnimg2 = 0;
@@ -1215,6 +1236,7 @@ on sysvar_change sysvar::PANELS::ImageNichia2
 on sysvar_change sysvar::PANELS::gray20Nichia
 {
     if ((@PANELS::gray20Nichia == 1) && (@PANELS::ChangeLSMmode == 1) && (@PANELS::LsmDeviceType == 1)){
+  staticImageReady = 0;
       if (@Canoe_Automation::grayValueNichia == 0){
         $CHLC_Container_01_ST3_DLS_HDR_Tunnel_Information_ST3::DLS_HDR_LgtDist_Dest_ST3 = 0;
       }
@@ -1292,6 +1314,7 @@ on sysvar_change sysvar::PANELS::LsmDeviceType
 on sysvar_change sysvar::PANELS::btnOsramTestPicture
 {
     if ((@PANELS::btnOsramTestPicture == 1)  && (@PANELS::ChangeLSMmode == 1) && (@PANELS::LsmDeviceType == 0)){
+  staticImageReady = 0;
      if (@Canoe_Automation::grayValueOsram == 0) {
        if (@PANELS::hdrAutoMode == 1){
        $CHLC_Container_01_ST3_DLS_HDR_Tunnel_Information_ST3::DLS_HDR_LgtDist_Dest_ST3 = 0;
@@ -1346,6 +1369,7 @@ on sysvar_change sysvar::PANELS::btnOsramTestPicture
 on sysvar_change sysvar::PANELS::btnNichiaTestPicture
 {
   if ((@PANELS::btnNichiaTestPicture == 1) && (@PANELS::ChangeLSMmode == 1) && (@PANELS::LsmDeviceType == 1)){
+    staticImageReady = 0;
     if (@Canoe_Automation::grayValueNichia == 0){
       if (@PANELS::hdrAutoMode == 1){
        $CHLC_Container_01_ST3_DLS_HDR_Tunnel_Information_ST3::DLS_HDR_LgtDist_Dest_ST3 = 0;

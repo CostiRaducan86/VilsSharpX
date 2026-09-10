@@ -1,6 +1,6 @@
 ﻿# Direct Control Mode Implementation Tracking
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-10
 **Design reference:** [Direct_Control_Mode_Architecture.md](Direct_Control_Mode_Architecture.md)
 **Active phase:** Phase 2 closed; Phase 4 (CAN-UART master) in progress
 
@@ -23,11 +23,11 @@
 | UI mode constraints | Complete | Direct control forces LVDS Generator and CAN "SmartVisio LSM". |
 | `P02.2` as ASCLIN1 TX | Complete | Validated on hardware with a Saleae capture. |
 | LVDS frame generation (OSRAM) | Complete | Byte stream and CRC verified against the ECU algorithm on captured frames. |
-| LVDS frame generation (NICHIA) | Partial | Builder implemented; transmit path untested with a Nichia module. |
+| LVDS frame generation (NICHIA) | Partial | 256x64 row builder, CRC-16, 12.5 Mbaud 8N1 TX and row timing are implemented; Nichia hardware validation remains pending. |
 | AVTP ingest on AURIX | Partial | `avtp_rx.c` implemented; hardware validation pending. |
 | CAN-UART master | Complete | CPU2 replays the OSRAM sequence, captures LSM responses and exposes master telemetry. |
 | LSM start-up sequence | Complete | Extracted from the ECU trace and validated against the LSM 2.0 start-up conversation. |
-| Loopback to pane B | Partial | OSRAM path implemented; NICHIA in Phase 6. |
+| Loopback to pane B | Partial | OSRAM path is validated; Nichia row assembly and `NI` Ethernet output are implemented, but hardware end-to-end validation remains pending. |
 | Direct Mode telemetry to PC | Partial | The existing `CD` transaction record path is functional; dedicated `DS` status consumer remains open. |
 | CAN replay from `.rply` | Open | `BtnCanReplay_Click` is a stub. |
 
@@ -83,8 +83,8 @@ Measurement phase, completed. No firmware or application code was changed during
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
 | 1.1 | Add `lvds_frame_build.c/.h` with the OSRAM byte-stream builder | Complete | Header, 25600 pixels, CRC-32 from `osram_crc32.c`, little-endian on the wire. |
-| 1.2 | Add the NICHIA row builder | Complete | 0x5D, row address with parity bits 7:6, CRC-16 from `rx_crc.c`. Implemented early because the parity rule was already available in `rxmon.c`. |
-| 1.3 | Add `lvds_tx.c/.h`: ASCLIN1 TX on `P02.2`, DMA channel 2 | Complete | Buffers in `dsram4`; completion polled, no transmit ISR. |
+| 1.2 | Add the NICHIA row builder | Complete | 0x5D, row address with parity bits 7:6, 256 pixels and CRC-16 from `rx_crc.c`; 64 rows produce a 16640-byte stream. |
+| 1.3 | Add `lvds_tx.c/.h`: ASCLIN1 TX on `P02.2`, DMA channel 2 | Complete | Device-dependent baud/framing; OSRAM uses 20 Mbaud 8O2 and Nichia uses 12.5 Mbaud 8N1. Buffers are in `dsram4`; completion is polled. |
 | 1.4 | Implement the safe ASCLIN1 direction switch | Complete | `asclin1_dma_stop()` disarms the receive DMA and service request first. |
 | 1.5 | Implement the `P02.2` handover without a LOW glitch | Complete | ASCLIN takes the pin while it idles HIGH; `adapter_ctrl_ttl_local_take_gpio()` reverses it. |
 | 1.6 | Add a built-in test pattern source | Complete | Two static patterns: full black and a value-120 grid every 4 pixels and 4 rows, selected from `g_lvdsTxTestPattern`. |
@@ -140,7 +140,7 @@ Measurement phase, completed. No firmware or application code was changed during
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| 3.1 | Push the transmitted frame to `frame_eth` for the `OS` loopback | Complete | OSRAM only; NICHIA row loopback belongs to Phase 6. |
+| 3.1 | Push the transmitted frame to `frame_eth` for the `OS` loopback | Complete | OSRAM frame loopback is validated; the common path also supports Nichia row assembly and `NI` fragments. |
 | 3.2 | Move the camera trigger source to the transmit frame-complete event | Complete | `direct_mode` fires the single-shot trigger on each completed transmission. |
 | 3.3 | Add `DirectModeCommand.cs` for the new commands | Open | IDs `0x08`, `0x09`, `0x0A` per D8. |
 | 3.4 | Add the Direct Mode status record and its PC-side consumer | Open | Surfaced in the diagnostics log/panel. |
@@ -159,8 +159,8 @@ Measurement phase, completed. No firmware or application code was changed during
 | 4.4 | Add `can_uart_master.c/.h` with request scheduling on ASCLIN4 | Complete | Runs on CPU2, fed by the bridge relay pump, own echo filtering. |
 | 4.5 | Add response capture, timeout and retry handling | Complete | Response length is protocol-derived, with idle fallback for truncated answers, echo classification and response timeout telemetry in `g_canUartMasterStats`. |
 | 4.6 | Feed master transactions into the existing `CD` record path | Complete | Direct Control Record is visible in the CAN/UART monitor; requests and LSM responses are generated locally and published through Ethernet. |
-| 4.7 | Keep the defect-injection filters working on master responses | Open | OSRAM and Nichia filters. |
-| 4.8 | Implement OSRAM startup upload and `.rply` replay in the UI | Complete | `BtnCanReplay_Click` sends `CM` step `0x08` packets and commit `0x09`; NormalRun-only traces are rejected. |
+| 4.7 | Keep the defect-injection filters working on master responses | Partial | OSRAM filter path is existing; Nichia response filtering and CRC8 recomputation are implemented, but Nichia hardware validation remains pending. |
+| 4.8 | Implement OSRAM startup upload and `.rply` replay in the UI | Complete | `BtnCanReplay_Click` sends `CM` step `0x08` packets and commit `0x09`; NormalRun-only traces are rejected. Nichia has separate step/commit commands and a built-in table. |
 | 4.9 | Validate the start-up sequence against the ECU trace on Saleae | Open | Byte and timing comparison. |
 | 4.10 | Re-capture an LSM 2.0 trace and diff it against the OSRAM 2.05 table | Complete | Functionally identical: 1289 versus 1290 start-up steps, the only difference being one extra initial `W 0x0001 = 0x0001` poll, and the same 32-step cycle. |
 | 4.11 | Fix the echo desynchronisation and timing fidelity | Complete | Gap measured from the last bus byte, quiet-bus gate before transmitting, response timeout cut from 5 ms to 600 us, sync validation counter. |
@@ -187,10 +187,10 @@ Measurement phase, completed. No firmware or application code was changed during
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| 6.1 | Implement the geometry rule (1:1, centre crop, optional downscale) | Open | Per D3. |
-| 6.2 | Add the Nichia row builder (0x5D, parity, CRC-16) | Open | 260-byte rows, 64 rows. |
-| 6.3 | Add the 12.5 Mbaud 8N1 TX configuration | Open | Same `lvds_tx` module. |
-| 6.4 | Add the Nichia CAN-UART master sequence | Open | From `trace_Nichia_StartUp_Run_*.txt`. |
+| 6.1 | Implement the geometry rule (1:1, centre crop, optional downscale) | Complete | Shared device mapping supports 1:1 matching geometry and the documented 320x80-to-256x64 centre crop; hardware validation remains part of Phase 7. |
+| 6.2 | Add the Nichia row builder (0x5D, parity, CRC-16) | Complete | 260-byte rows, 64 rows, with the existing Nichia CRC implementation. |
+| 6.3 | Add the 12.5 Mbaud 8N1 TX configuration | Complete | Implemented in the shared `lvds_tx` module with a Nichia row timer and per-device framing. |
+| 6.4 | Add the Nichia CAN-UART master sequence | Complete | Device-aware master supports the captured Nichia startup/cycle tables, uploaded Nichia steps and the built-in Nichia table. |
 | 6.5 | Validate the Nichia Direct Mode on hardware | Open | Requires the Nichia module. |
 
 ## Phase 7 -> Validation and hardening
@@ -198,7 +198,7 @@ Measurement phase, completed. No firmware or application code was changed during
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
 | 7.1 | Bench validation without the LSM (scope only) | Open | Architecture section 15, step 1. |
-| 7.2 | Loopback validation (pane B mirrors the generated image) | Open | Step 2. |
+| 7.2 | Loopback validation (pane B mirrors the generated image) | Partial | OSRAM loopback is validated; repeat the test with Nichia row assembly and `NI` fragments. |
 | 7.3 | LSM powered, LVDS only | Open | Step 3. |
 | 7.4 | LSM full Direct Control Mode with the CAN-UART master | Complete | Fix6 trace and Watch capture confirm the LSM running with locally generated CAN-UART traffic and visible Direct Control Record output. |
 | 7.5 | 30-minute stability run with flat counters | Open | Step 5. |
@@ -335,3 +335,4 @@ zero bytes, which independently confirms the generated stream is byte-compatible
 | 2026-09-03 | Validated on hardware. Byte period 600.0 ns and frame duration 15.3659 ms against the ECU reference of 15.3651 ms, all frames 25608 bytes with a valid CRC, `MASTER_STATE` stable at 0x0003 and FWC flat after the truncated frame at the start of the recording. The LSM stays lit in Direct Control Mode. |
 | 2026-09-03 | Direct Control CAN-UART Record validated. Fix6 published every locally generated request and LSM response through the existing `CD` Ethernet path: 274 of 274 complete `HWSTAT W` blocks contained exactly seven reads (100.00%), compared with 181 of 271 blocks (66.79%) in the Fix4 debug trace. The corresponding Watch capture showed `responseTimeouts=0`, `shortResponses=0`, `tailBytes=0`, `outRingDrops=0` and `queueOverruns=0`. |
 | 2026-09-04 | Implemented trace-driven OSRAM start-up replay. The C# UI extracts and validates the complete 1291-step start-up sequence from the loaded `.rply` trace, rejects NormalRun-only traces such as Fix6, and uploads the steps to AURIX through Ethernet commands `0x08` and `0x09`. AURIX waits for the committed upload during PC-driven Direct Control, then runs the uploaded start-up once before returning to the built-in cyclic sequence; the firmware default start-up remains available for future standalone TFT operation. |
+| 2026-09-10 | Added Nichia Direct Control support: 256x64 row framing with parity and CRC-16, 12.5 Mbaud 8N1 transmission with row pacing, device-aware Ethernet geometry and `NI` fragments, Nichia CAN-UART startup/cycle tables, dedicated upload commands, and runtime defect-response filtering. Nichia hardware validation remains open. |
