@@ -612,10 +612,12 @@ reproduces the ECU byte for byte instead of re-deriving CRCs and timing.
 PC-driven replay of a `.rply` trace remains available and overrides the built-in table
 while it runs. On entry to Direct Control, the AURIX master now waits idle instead of
 starting the built-in startup table. The C# Replay command uploads one request per
-Ethernet `CM` command (`0x08`), followed by a commit command (`0x09`). A valid commit
-starts the uploaded startup sequence; after it completes, the existing 32-step cycle
-is used. This keeps the built-in table available for a future standalone AURIX/TFT
-Direct Control workflow without using it during the PC replay test.
+Ethernet `CM` command, followed by a device-specific commit command. OSRAM uses step
+`0x08` and commit `0x09`; NICHIA uses step `0x0A` and commit `0x0B`. A valid commit
+starts the uploaded startup sequence; after it completes, the existing device-specific
+cyclic sequence is used. This keeps the built-in tables available for a future
+standalone AURIX/TFT Direct Control workflow without using them during the PC replay
+test.
 
 The PC-side loader rejects a trace unless it contains the OSRAM startup signature:
 the initial `W 0x0001 = 0x0001` polling prefix, the initial `W 0x0000 = 0x60F5`
@@ -623,6 +625,14 @@ configuration write and the first `0xBE` status read. It also requires the compl
 startup boundary (1291 valid OSRAM transactions for the current OSRAM 2.0 trace).
 NormalRun-only traces, such as Fix6, are therefore rejected before any Ethernet
 sequence command is sent.
+
+The NICHIA loader applies the same safety rule with the NICHIA startup signature. The
+first seven valid NICHIA writes must start with `55 11 0C 00 00 08 19`, and the EEPROM
+read request `55 B1 1C 05` must appear in the following three records. The three-record
+window accommodates the duplicate initial write present in captured startup traces.
+The loader then extracts the first 296 startup transactions. A NICHIA trace containing
+only cyclic normal-run traffic is rejected before the first Ethernet upload packet,
+with the message `The trace does not contain a complete NICHIA start-up sequence.`
 
 Half-duplex arbitration must be preserved: the master transmits a request, then waits for
 the response window before sending the next request. Response timeout, retry count and
@@ -753,7 +763,7 @@ and starvation fallback.
 | New `DirectModeCommand.cs` | Sender for the new `0x88B5` commands (generator config, CAN sequence, status request). |
 | New status consumer | Parse the `DS` telemetry record and surface it in the diagnostics panel/log. |
 | Pane B labelling | Mark the frame source as loopback when Direct Control Mode is active. |
-| CAN replay | Implement `BtnCanReplay_Click` on top of `FE_CMD_DIRECT_CAN_SEQ`. |
+| CAN replay | `BtnCanReplay_Click` uploads the validated OSRAM or NICHIA startup trace, then commits it with the device-specific Ethernet command. |
 | Safety interlocks | Block entering Direct Control Mode while an LVDS/CAN fault injection is active, and warn if no AVTP source is running. |
 
 ## 11. Mode transition state machine

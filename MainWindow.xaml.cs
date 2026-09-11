@@ -1938,6 +1938,9 @@ namespace VilsSharpX
             _canDiagUiTimer.Start();
 
             _canDiagWatchdogTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+
+            // Refresh pane C when the camera display FPS becomes available.
+            UpdateBaslerRunInfoLabel();
             _canDiagWatchdogTimer.Tick += (_, _) => CanDiagWatchdogTick();
             _canDiagWatchdogTimer.Start();
 
@@ -2648,7 +2651,7 @@ namespace VilsSharpX
             if (BtnCanReplay != null)
                 BtnCanReplay.IsEnabled = _controlMode == 1 &&
                     !_canDiagRecording &&
-                    (_currentDeviceType == LsmDeviceType.Nichia || _canDiagTraceLoaded);
+                    _canDiagTraceLoaded;
         }
 
         private void BtnCanReplay_Click(object sender, RoutedEventArgs e)
@@ -2665,17 +2668,18 @@ namespace VilsSharpX
                     return;
                 }
 
+                if (!_canDiagTraceLoaded)
+                    return;
+
+                var trace = _canDiagStore.SnapshotOldestFirst(0, _canDiagStore.Count);
                 if (_currentDeviceType == LsmDeviceType.Nichia)
                 {
-                    NichiaStartupSequenceCommand.StartHardcoded(txDev, AppendDiagLog);
-                    MessageBox.Show("The built-in NICHIA start-up sequence was started on AURIX.",
+                    NichiaStartupSequenceCommand.Send(txDev, trace, AppendDiagLog);
+                    MessageBox.Show("The NICHIA start-up sequence was uploaded to AURIX.",
                         "Replay", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
-                    if (!_canDiagTraceLoaded)
-                        return;
-                    var trace = _canDiagStore.SnapshotOldestFirst(0, _canDiagStore.Count);
                     OsramStartupSequenceCommand.Send(txDev, trace, AppendDiagLog);
                     MessageBox.Show("The OSRAM start-up sequence was uploaded to AURIX.",
                     "Replay", MessageBoxButton.OK, MessageBoxImage.Information);

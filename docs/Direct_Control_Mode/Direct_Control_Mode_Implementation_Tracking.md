@@ -1,6 +1,6 @@
 ﻿# Direct Control Mode Implementation Tracking
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-09-11
 **Design reference:** [Direct_Control_Mode_Architecture.md](Direct_Control_Mode_Architecture.md)
 **Active phase:** Phase 2 closed; Phase 4 (CAN-UART master) in progress
 
@@ -29,7 +29,7 @@
 | LSM start-up sequence | Complete | Extracted from the ECU trace and validated against the LSM 2.0 start-up conversation. |
 | Loopback to pane B | Partial | OSRAM path is validated; Nichia row assembly and `NI` Ethernet output are implemented, but hardware end-to-end validation remains pending. |
 | Direct Mode telemetry to PC | Partial | The existing `CD` transaction record path is functional; dedicated `DS` status consumer remains open. |
-| CAN replay from `.rply` | Open | `BtnCanReplay_Click` is a stub. |
+| CAN replay from `.rply` | Complete | `BtnCanReplay_Click` uploads the validated OSRAM or NICHIA startup trace and commits it with the device-specific Ethernet command; normal-run-only traces are rejected before upload. |
 
 ## Decisions
 
@@ -160,7 +160,7 @@ Measurement phase, completed. No firmware or application code was changed during
 | 4.5 | Add response capture, timeout and retry handling | Complete | Response length is protocol-derived, with idle fallback for truncated answers, echo classification and response timeout telemetry in `g_canUartMasterStats`. |
 | 4.6 | Feed master transactions into the existing `CD` record path | Complete | Direct Control Record is visible in the CAN/UART monitor; requests and LSM responses are generated locally and published through Ethernet. |
 | 4.7 | Keep the defect-injection filters working on master responses | Partial | OSRAM filter path is existing; Nichia response filtering and CRC8 recomputation are implemented, but Nichia hardware validation remains pending. |
-| 4.8 | Implement OSRAM startup upload and `.rply` replay in the UI | Complete | `BtnCanReplay_Click` sends `CM` step `0x08` packets and commit `0x09`; NormalRun-only traces are rejected. Nichia has separate step/commit commands and a built-in table. |
+| 4.8 | Implement OSRAM and NICHIA startup upload and `.rply` replay in the UI | Complete | `BtnCanReplay_Click` sends OSRAM step `0x08`/commit `0x09` or NICHIA step `0x0A`/commit `0x0B`; normal-run-only traces are rejected before upload. Built-in firmware startup tables remain available for standalone TFT operation. |
 | 4.9 | Validate the start-up sequence against the ECU trace on Saleae | Open | Byte and timing comparison. |
 | 4.10 | Re-capture an LSM 2.0 trace and diff it against the OSRAM 2.05 table | Complete | Functionally identical: 1289 versus 1290 start-up steps, the only difference being one extra initial `W 0x0001 = 0x0001` poll, and the same 32-step cycle. |
 | 4.11 | Fix the echo desynchronisation and timing fidelity | Complete | Gap measured from the last bus byte, quiet-bus gate before transmitting, response timeout cut from 5 ms to 600 us, sync validation counter. |
@@ -170,7 +170,7 @@ Measurement phase, completed. No firmware or application code was changed during
 | 4.15 | Stop assuming the transmit echo is present | Complete | The raw stream is captured per step and the echo detected by comparing with the request. |
 | 4.16 | Re-test the cyclic keep-alive cadence | Complete | Fix6 trace has 274/274 complete `HWSTAT W` blocks with 7 reads; `responseTimeouts`, `shortResponses`, `tailBytes` and output-ring drops remained zero in the corresponding Watch capture. |
 | 4.17 | Hold the default startup during PC-driven Direct entry | Complete | AURIX waits in Direct Control until a valid uploaded trace is committed; the built-in table remains reserved for future standalone TFT operation. |
-| 4.18 | Validate startup detection for loaded traces | Complete | Requires the initial OSRAM polling/configuration signature and a complete 1291-step startup boundary; NormalRun-only traces are rejected. |
+| 4.18 | Validate startup detection for loaded traces | Complete | OSRAM requires its polling/configuration signature and complete 1291-step boundary. NICHIA requires seven initial `55 11 0C 00 00 08 19` writes plus `55 B1 1C 05` in the following three records and extracts 296 startup steps; normal-run-only traces are rejected. |
 
 ## Phase 5 -> System integration and mode transitions
 
@@ -191,7 +191,7 @@ Measurement phase, completed. No firmware or application code was changed during
 | 6.2 | Add the Nichia row builder (0x5D, parity, CRC-16) | Complete | 260-byte rows, 64 rows, with the existing Nichia CRC implementation. |
 | 6.3 | Add the 12.5 Mbaud 8N1 TX configuration | Complete | Implemented in the shared `lvds_tx` module with a Nichia row timer and per-device framing. |
 | 6.4 | Add the Nichia CAN-UART master sequence | Complete | Device-aware master supports the captured Nichia startup/cycle tables, uploaded Nichia steps and the built-in Nichia table. |
-| 6.5 | Validate the Nichia Direct Mode on hardware | Open | Requires the Nichia module. |
+| 6.5 | Validate the Nichia Direct Mode on hardware | Partial | Valid startup `.rply` replay and rejection of normal-run-only traces were confirmed; full LVDS and long-run hardware validation remains open. |
 
 ## Phase 7 -> Validation and hardening
 
@@ -336,3 +336,4 @@ zero bytes, which independently confirms the generated stream is byte-compatible
 | 2026-09-03 | Direct Control CAN-UART Record validated. Fix6 published every locally generated request and LSM response through the existing `CD` Ethernet path: 274 of 274 complete `HWSTAT W` blocks contained exactly seven reads (100.00%), compared with 181 of 271 blocks (66.79%) in the Fix4 debug trace. The corresponding Watch capture showed `responseTimeouts=0`, `shortResponses=0`, `tailBytes=0`, `outRingDrops=0` and `queueOverruns=0`. |
 | 2026-09-04 | Implemented trace-driven OSRAM start-up replay. The C# UI extracts and validates the complete 1291-step start-up sequence from the loaded `.rply` trace, rejects NormalRun-only traces such as Fix6, and uploads the steps to AURIX through Ethernet commands `0x08` and `0x09`. AURIX waits for the committed upload during PC-driven Direct Control, then runs the uploaded start-up once before returning to the built-in cyclic sequence; the firmware default start-up remains available for future standalone TFT operation. |
 | 2026-09-10 | Added Nichia Direct Control support: 256x64 row framing with parity and CRC-16, 12.5 Mbaud 8N1 transmission with row pacing, device-aware Ethernet geometry and `NI` fragments, Nichia CAN-UART startup/cycle tables, dedicated upload commands, and runtime defect-response filtering. Nichia hardware validation remains open. |
+| 2026-09-11 | Completed PC-driven Nichia startup replay validation. The C# loader accepts the captured startup trace, including its duplicate initial write, uploads 296 startup steps through `0x0A` and commits with `0x0B`; normal-run-only traces are rejected before Ethernet upload. The firmware hardcoded startup command `0x0C` remains reserved for future standalone TFT operation. |

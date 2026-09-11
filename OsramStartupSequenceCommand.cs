@@ -29,9 +29,8 @@ public static class OsramStartupSequenceCommand
 
         var existing = CaptureDeviceList.Instance
             .OfType<LibPcapLiveDevice>()
-            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase));
-        if (existing == null)
-            throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
+            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
 
         if (startup.Count > ushort.MaxValue)
             throw new InvalidOperationException("The start-up sequence is too long for the Ethernet protocol.");
@@ -119,7 +118,7 @@ public static class OsramStartupSequenceCommand
         return result;
     }
 
-    private static int FindStartupBoundary(IReadOnlyList<LsmCanDiagRecord> records)
+    private static int FindStartupBoundary(List<LsmCanDiagRecord> records)
     {
         // NormalRun is a repeating 32-step cycle. Find two equal adjacent cycles
         // and use their first position as the end of the one-shot startup trace.
@@ -151,7 +150,7 @@ public static class OsramStartupSequenceCommand
         return -1;
     }
 
-    private static bool HasStartupSignature(IReadOnlyList<LsmCanDiagRecord> records)
+    private static bool HasStartupSignature(List<LsmCanDiagRecord> records)
     {
         const string InitialPoll = "80A520010001E5CB";
         const string InitialConfigWrite = "80A5200060F5764A";

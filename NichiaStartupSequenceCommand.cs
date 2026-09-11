@@ -28,9 +28,8 @@ public static class NichiaStartupSequenceCommand
 
         var existing = CaptureDeviceList.Instance
             .OfType<LibPcapLiveDevice>()
-            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase));
-        if (existing == null)
-            throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
+            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
 
         if (startup.Count > ushort.MaxValue)
             throw new InvalidOperationException("The start-up sequence is too long for the Ethernet protocol.");
@@ -74,9 +73,8 @@ public static class NichiaStartupSequenceCommand
     {
         var existing = CaptureDeviceList.Instance
             .OfType<LibPcapLiveDevice>()
-            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase));
-        if (existing == null)
-            throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
+            .FirstOrDefault(d => string.Equals(d.Name, pcapDeviceName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"NIC not found: {pcapDeviceName}");
 
         var packet = BuildPacket(CmdSequenceHardcoded, 3);
         using var txDev = new LibPcapLiveDevice(existing.Interface);
@@ -100,6 +98,9 @@ public static class NichiaStartupSequenceCommand
             .ToList();
 
         if (records.Count < NichiaStartupBoundary)
+            return [];
+
+        if (!HasStartupSignature(records, log))
             return [];
 
         var startupRecords = records.Take(NichiaStartupBoundary + 1).ToList();
@@ -130,7 +131,54 @@ public static class NichiaStartupSequenceCommand
         return result;
     }
 
-    private static int CountInitialZeroWrites(IReadOnlyList<LsmCanDiagRecord> records)
+    private static bool HasStartupSignature(List<LsmCanDiagRecord> records, Action<string>? log)
+    {
+        const int InitialWriteCount = 7;
+        ReadOnlySpan<byte> InitialWrite =
+        [
+            0x55, 0x11, 0x0C, 0x00, 0x00, 0x08, 0x19
+        ];
+
+        if (records.Count <= InitialWriteCount)
+        {
+            log?.Invoke("[trace] NICHIA startup signature not found; replay rejected");
+            return false;
+        }
+
+        for (int index = 0; index < InitialWriteCount; index++)
+        {
+            var record = records[index];
+            if (record.Operation != LsmCanDiagOperation.Write ||
+                record.RawPayload.Length < InitialWrite.Length ||
+                !record.RawPayload.AsSpan(0, InitialWrite.Length).SequenceEqual(InitialWrite))
+            {
+                log?.Invoke("[trace] NICHIA startup signature not found; replay rejected");
+                return false;
+            }
+        }
+
+        ReadOnlySpan<byte> EepromReadRequest = [0x55, 0xB1, 0x1C, 0x05];
+        bool hasEepromRead = false;
+        int searchEnd = Math.Min(records.Count, InitialWriteCount + 3);
+        for (int index = InitialWriteCount; index < searchEnd; index++)
+        {
+            var record = records[index];
+            if (record.Operation == LsmCanDiagOperation.Write &&
+                record.RawPayload.Length >= EepromReadRequest.Length &&
+                record.RawPayload.AsSpan(0, EepromReadRequest.Length).SequenceEqual(EepromReadRequest))
+            {
+                hasEepromRead = true;
+                break;
+            }
+        }
+
+        if (!hasEepromRead)
+            log?.Invoke("[trace] NICHIA startup signature not found; replay rejected");
+
+        return hasEepromRead;
+    }
+
+    private static int CountInitialZeroWrites(List<LsmCanDiagRecord> records)
     {
         int count = 0;
         foreach (var record in records)
@@ -145,7 +193,7 @@ public static class NichiaStartupSequenceCommand
         return count;
     }
 
-    private static uint GetGapUs(IReadOnlyList<LsmCanDiagRecord> records, int index)
+    private static uint GetGapUs(List<LsmCanDiagRecord> records, int index)
     {
         ushort recordedGap = records[index].InterFrameDelayUs;
         uint gapUs;
