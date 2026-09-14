@@ -177,6 +177,10 @@ namespace VilsSharpX
         private OsramEthCapture? _osramEthCapture;
         // Basler USB3 camera capture (pane C)
         private BaslerCameraCapture? _baslerCapture;
+        // Pylon Open/Close block for seconds and a USB3 camera allows one owner at
+        // a time, so every camera lifecycle call is serialized on this chain.
+        private Task _baslerWork = Task.CompletedTask;
+        private int _baslerStartGeneration;
         private LsmCanDiagCapture? _canDiagCapture;
         private readonly LsmCanDiagStore _canDiagStore = new(0);
         private OsramDefectStore? _osramDefectStore;
@@ -1028,6 +1032,9 @@ namespace VilsSharpX
 
             // Keep SmartVisio Box aligned even after board reset/run while WPF stays open.
             _deviceModeSyncTimer.Start();
+
+            // Open the camera up front so the first Start renders pane C at once.
+            StartBaslerCapture(useFreeRunFallback: true);
         }
 
         private void Window_SourceInitialized(object? sender, EventArgs e)
@@ -1697,30 +1704,99 @@ namespace VilsSharpX
 
         // ─── Basler camera capture (pane C) ────────────────────────────────
 
-        private void StartBaslerCapture()
+        private void StartBaslerCapture(bool useFreeRunFallback = false)
         {
-            try
+            var existing = _baslerCapture;
+            if (existing != null && existing.IsCapturing)
             {
-                StopBaslerCapture();
-                _baslerCapture = BaslerCameraCapture.Start(AppendDiagLog);
-                _baslerCapture.OnFrameReady += (frame, w, h) =>
-                    Dispatcher.BeginInvoke(() => HandleBaslerFrameReady(frame, w, h));
-                AppendDiagLog("[basler] Basler camera capture started");
+                // The camera outlives a session stop; reopening the pylon device
+                // would leave pane C on "Signal not available" for a second or more.
+                if (useFreeRunFallback)
+                    QueueBaslerWork(() => existing.UseFreeRunFallback());
+                return;
             }
-            catch (Exception ex)
+
+            var previous = DetachBaslerCapture();
+            int generation = _baslerStartGeneration;
+
+            QueueBaslerWork(() =>
             {
-                AppendDiagLog($"[basler] Camera capture error: {ex.Message}");
-            }
+                previous?.Dispose();
+
+                BaslerCameraCapture capture;
+                try
+                {
+                    capture = BaslerCameraCapture.Start(AppendDiagLog);
+                    if (useFreeRunFallback)
+                        capture.UseFreeRunFallback();
+                }
+                catch (Exception ex)
+                {
+                    AppendDiagLog($"[basler] Camera capture error: {ex.Message}");
+                    return;
+                }
+
+                Dispatcher.BeginInvoke(() =>
+                {
+                    // A Stop or a newer Start ran while the camera was opening.
+                    if (generation != _baslerStartGeneration)
+                    {
+                        QueueBaslerWork(capture.Dispose);
+                        return;
+                    }
+
+                    capture.OnFrameReady += (frame, w, h) =>
+                        Dispatcher.BeginInvoke(() => HandleBaslerFrameReady(frame, w, h));
+                    _baslerCapture = capture;
+                    _lastBaslerFrameUtc = DateTime.UtcNow;
+                    AppendDiagLog("[basler] Basler camera capture started");
+                });
+            });
         }
 
         private void StopBaslerCapture()
         {
-            if (_baslerCapture != null)
+            var previous = DetachBaslerCapture();
+            if (previous == null)
+                return;
+
+            QueueBaslerWork(() =>
             {
-                _baslerCapture.Dispose();
-                _baslerCapture = null;
+                previous.Dispose();
                 AppendDiagLog("[basler] Basler camera capture stopped");
+            });
+        }
+
+        /// <summary>UI thread only: detaches the camera and invalidates a pending open.</summary>
+        private BaslerCameraCapture? DetachBaslerCapture()
+        {
+            _baslerStartGeneration++;
+            var previous = _baslerCapture;
+            _baslerCapture = null;
+            return previous;
+        }
+
+        /// <summary>UI thread only: queues camera work off the dispatcher, in call order.</summary>
+        private void QueueBaslerWork(Action work) =>
+            _baslerWork = _baslerWork.ContinueWith(_ =>
+            {
+                try { work(); }
+                catch (Exception ex) { AppendDiagLog($"[basler] Camera lifecycle error: {ex.Message}"); }
+            }, TaskScheduler.Default);
+
+        /// <summary>
+        /// Drops the pane C image. The bitmap survives a Stop, so without this the
+        /// previous session's camera picture stays on screen while the camera opens.
+        /// </summary>
+        private void ClearPaneCImage()
+        {
+            lock (_frameLock)
+            {
+                _latestC = null;
             }
+            _downscaledCameraFrame = null;
+            _wbC = BitmapUtils.MakeGray8(1, 1);
+            if (ImgC != null) ImgC.Source = _wbC;
         }
 
         private void HandleBaslerFrameReady(byte[] frame, int w, int h)
@@ -4153,14 +4229,19 @@ namespace VilsSharpX
             _lvdsSignalLost = true;
             ResetLvdsStatusForNewSession();
 
-            // Pane C: Basler USB3 camera live capture
-            StartBaslerCapture();
-            // At session start there is no confirmed LVDS frame yet. Use the
-            // camera fallback immediately so a failsafe ECU cannot leave pane C
-            // waiting for a hardware trigger that will never arrive.
-            _baslerCapture?.UseFreeRunFallback();
+            // Pane C: Basler USB3 camera live capture. Opening the pylon device
+            // takes seconds, so it runs off the dispatcher; blocking the UI thread
+            // here also delays the pane B LVDS frames and the pane D comparison.
+            // At session start there is no confirmed LVDS frame yet, so the camera
+            // starts in free-run: a failsafe ECU would never deliver the hardware
+            // trigger pane C waits for.
+            StartBaslerCapture(useFreeRunFallback: true);
             _lastBaslerFrameUtc = DateTime.UtcNow;
-            _baslerSignalLost = false;
+            // Pane C must stay on "Signal not available" until this session's first
+            // frame: opening the camera takes a moment and the previous session's
+            // picture must never be mistaken for live content.
+            _baslerSignalLost = true;
+            ClearPaneCImage();
 
             if (_communicationFaultState.AvtpFaultEnabled)
             {
@@ -4258,7 +4339,9 @@ namespace VilsSharpX
             _liveCapture.StopAll();
             StopNichiaEthCapture();
             StopOsramEthCapture();
-            StopBaslerCapture();
+            // The camera stays open so the next Start renders pane C immediately;
+            // HandleBaslerFrameReady drops frames while playback is stopped and
+            // Window_Closing releases the device.
 
             // Ensure we don't remain paused after stopping.
             _playback.PauseGate.Set();
@@ -4284,7 +4367,7 @@ namespace VilsSharpX
             // Pane C: show "Signal not available", clear label, reset zoom
             if (NoSignalC != null) NoSignalC.Visibility = Visibility.Visible;
             if (LblRunInfoC != null) LblRunInfoC.Text = "";
-            _latestC = null;
+            ClearPaneCImage();
             _zoomPan.Reset((int)Pane.C);
 
             // Restore button states: Load Files + Start enabled; others disabled
@@ -4960,7 +5043,7 @@ namespace VilsSharpX
 
             if (_comparisonMode > 0 && _baslerSignalLost && NoSignalD != null)
                 NoSignalD.Visibility = Visibility.Visible;
-            else if (_baslerCapture != null && _baslerCapture.IsCapturing)
+            else if (!_baslerSignalLost && _baslerCapture != null && _baslerCapture.IsCapturing)
             {
                 if (NoSignalC != null) NoSignalC.Visibility = Visibility.Collapsed;
             }
