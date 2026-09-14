@@ -56,6 +56,7 @@
 #define FE_CMD_NICHIA_SEQ_STEP    0x0Au       /* Stage one Nichia Direct Control step */
 #define FE_CMD_NICHIA_SEQ_COMMIT  0x0Bu       /* Activate staged Nichia startup steps */
 #define FE_CMD_NICHIA_SEQ_HARDCODED 0x0Cu     /* Start built-in Nichia startup table */
+#define FE_CMD_AVTP_SOURCE        0x0Du       /* Command: lock AVTP ingest to one source MAC */
 #define FE_HDR_LEN                18u
 #define FE_DIAG_HDR_LEN           8u
 /* v2 payload: 22 fixed bytes + 72 raw UART bytes = 94 bytes

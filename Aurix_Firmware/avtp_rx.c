@@ -26,6 +26,10 @@ static uint8   s_readyIdx    = 1u;
 static uint32  s_chunkMask   = 0u;
 static boolean s_frameReady  = FALSE;
 
+/* Accept every source until the PC arms the filter. */
+static uint8   s_srcFilter[6];
+static boolean s_srcFilterOn = FALSE;
+
 /* All 20 chunk bits set. */
 #define AVTP_RX_FULL_MASK   ((1u << AVTP_RVF_CHUNKS) - 1u)
 
@@ -34,7 +38,20 @@ void avtp_rx_init(void)
     AvtpRxStats zero = {0};
 
     g_avtpRxStats = zero;
+    s_srcFilterOn = FALSE;
     avtp_rx_reset();
+}
+
+void avtp_rx_set_source_filter(const uint8 *mac6)
+{
+    if (mac6 == NULL_PTR)
+    {
+        s_srcFilterOn = FALSE;
+        return;
+    }
+
+    memcpy(s_srcFilter, mac6, 6u);
+    s_srcFilterOn = TRUE;
 }
 
 void avtp_rx_reset(void)
@@ -69,6 +86,8 @@ boolean avtp_rx_handle_packet(const uint8 *packet, uint32 len)
     uint32 avtpLen;
     uint8  line1;
     uint32 chunk;
+    uint32 srcLow;
+    uint32 streamLow;
     boolean endOfFrame;
 
     if ((packet == NULL_PTR) || (len < 14u))
@@ -89,6 +108,12 @@ boolean avtp_rx_handle_packet(const uint8 *packet, uint32 len)
 
     if (etherType != AVTP_ETHERTYPE)
         return FALSE;
+
+    if (s_srcFilterOn && (memcmp(&packet[6], s_srcFilter, 6u) != 0))
+    {
+        g_avtpRxStats.packetsForeignSource++;
+        return TRUE;
+    }
 
     avtp    = &packet[offset];
     avtpLen = len - offset;
@@ -111,6 +136,24 @@ boolean avtp_rx_handle_packet(const uint8 *packet, uint32 len)
     }
 
     chunk = (uint32)(line1 - 1u) / AVTP_RVF_LINES_PER_PACKET;
+
+    /* The reassembler keys chunks only by line number, so two AVTP sources on
+     * the wire (for example a CANoe gateway still streaming while the PC
+     * generator runs) merge into one frame and show up as duplicates, restarts
+     * and incomplete frames.  sourceChanges rising with the packet rate is the
+     * direct evidence for that. */
+    srcLow    = ((uint32)packet[8] << 24) | ((uint32)packet[9] << 16) |
+                ((uint32)packet[10] << 8) | (uint32)packet[11];
+    streamLow = ((uint32)avtp[8] << 24) | ((uint32)avtp[9] << 16) |
+                ((uint32)avtp[10] << 8) | (uint32)avtp[11];
+
+    if ((srcLow != g_avtpRxStats.lastSrcMac) ||
+        (streamLow != g_avtpRxStats.lastStreamId))
+    {
+        g_avtpRxStats.sourceChanges++;
+        g_avtpRxStats.lastSrcMac   = srcLow;
+        g_avtpRxStats.lastStreamId = streamLow;
+    }
 
     /* A new first chunk before the end-of-frame marker means the previous
      * frame was truncated on the wire. */

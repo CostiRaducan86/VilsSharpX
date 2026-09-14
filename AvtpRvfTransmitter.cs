@@ -50,6 +50,11 @@ namespace VilsSharpX
         private long _txFramesSent;
         private long _txFramesDropped;
 
+        // The 20 packets of one frame must not interleave with another caller's
+        // burst: the AURIX reassembler keys chunks only by line number, so an
+        // interleaved frame produces duplicate/missing chunks and is dropped.
+        private readonly object _txLock = new();
+
         public AvtpRvfTransmitter(
             string npfDeviceName,
             string srcMac = "3C:CE:15:00:00:19",
@@ -105,30 +110,34 @@ namespace VilsSharpX
                 throw new ArgumentException($"Expected {W * H} bytes (320x80 Gray8). Got {gray8_320x80.Length}.");
 
             // --- Hard rate limiter: enforce max 100fps regardless of caller ---
-            double nowMs = _txPaceSw.Elapsed.TotalMilliseconds;
-            if ((nowMs - _lastTxMs) < MinFrameIntervalMs)
+            lock (_txLock)
             {
-                Interlocked.Increment(ref _txFramesDropped);
-                return Task.CompletedTask; // skip this frame
+                double nowMs = _txPaceSw.Elapsed.TotalMilliseconds;
+                if ((nowMs - _lastTxMs) < MinFrameIntervalMs)
+                {
+                    Interlocked.Increment(ref _txFramesDropped);
+                    return Task.CompletedTask; // skip this frame
+                }
+                _lastTxMs = nowMs;
+
+                int headerCounter = 1; // 1,5,9,...,77 then wrap (CAPL style)
+
+                for (int p = 0; p < PacketsPerFrame; p++)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    bool endFrame = (p == PacketsPerFrame - 1);
+                    var ethFrame = BuildOnePacket(gray8_320x80, headerCounter, endFrame);
+
+                    _dev.SendPacket(ethFrame);
+
+                    headerCounter += 4;
+                    if (headerCounter == 0x51) headerCounter = 1;
+                }
+
+                Interlocked.Increment(ref _txFramesSent);
             }
-            _lastTxMs = nowMs;
 
-            int headerCounter = 1; // 1,5,9,...,77 then wrap (CAPL style)
-
-            for (int p = 0; p < PacketsPerFrame; p++)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                bool endFrame = (p == PacketsPerFrame - 1);
-                var ethFrame = BuildOnePacket(gray8_320x80, headerCounter, endFrame);
-
-                _dev.SendPacket(ethFrame);
-
-                headerCounter += 4;
-                if (headerCounter == 0x51) headerCounter = 1;
-            }
-
-            Interlocked.Increment(ref _txFramesSent);
             return Task.CompletedTask;
         }
 

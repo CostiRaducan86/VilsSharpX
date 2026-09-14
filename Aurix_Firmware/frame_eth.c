@@ -1599,6 +1599,18 @@ void frame_eth_poll_rx(void)
                         }
                     }
                 }
+                else if (cmdId == FE_CMD_AVTP_SOURCE)
+                {
+                    /* Payload: [17] = arm (0 = accept every source)
+                     *          [18..23] = Ethernet source MAC to follow */
+                    if (rxLen >= 24u)
+                    {
+                        if (cmdPayload != 0u)
+                            avtp_rx_set_source_filter(&pRxBuf[18]);
+                        else
+                            avtp_rx_set_source_filter(NULL_PTR);
+                    }
+                }
                 else if (cmdId == FE_CMD_OSRAM_SEQ_STEP)
                 {
                     /* Payload: index(2), total(2), gapUs(4), len(1), read(1), data(10). */

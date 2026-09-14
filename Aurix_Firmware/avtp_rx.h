@@ -46,6 +46,7 @@ typedef struct
 {
     volatile uint32 packetsAccepted;    /* well-formed RVF chunks consumed     */
     volatile uint32 packetsRejected;    /* bad length, line number or geometry */
+    volatile uint32 packetsForeignSource; /* dropped by the source MAC filter  */
     volatile uint32 framesComplete;     /* frames handed to the generator      */
     volatile uint32 framesIncomplete;   /* end-of-frame with missing chunks    */
     volatile uint32 framesRestarted;    /* new frame began before end-of-frame */
@@ -53,6 +54,9 @@ typedef struct
     volatile uint32 duplicateChunks;    /* same chunk received twice per frame */
     volatile uint32 lastChunkMask;      /* chunk bitmask of the last frame     */
     volatile uint32 lastLine;           /* last accepted first-line number     */
+    volatile uint32 lastSrcMac;         /* low 4 bytes of the last source MAC  */
+    volatile uint32 lastStreamId;       /* low 4 bytes of the last stream id   */
+    volatile uint32 sourceChanges;      /* source MAC / stream id alternations */
 } AvtpRxStats;
 
 extern AvtpRxStats g_avtpRxStats;
@@ -62,6 +66,18 @@ extern AvtpRxStats g_avtpRxStats;
 /** Reset the reassembly state and telemetry. */
 void avtp_rx_init(void);
 void avtp_rx_reset(void);
+
+/**
+ * Restrict reassembly to one Ethernet source MAC.
+ *
+ * Chunks are keyed only by line number, so two AVTP sources sending to the same
+ * multicast destination (PC generator plus a CANoe stream) merge into a single
+ * frame and destroy it.  The PC arms this filter with the MAC it wants the
+ * generator to follow.
+ *
+ * @param mac6  6-byte source MAC, or NULL_PTR to accept every source again
+ */
+void avtp_rx_set_source_filter(const uint8 *mac6);
 
 /**
  * Feed one received Ethernet packet.

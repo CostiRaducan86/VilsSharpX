@@ -1351,6 +1351,7 @@ namespace VilsSharpX
 
             _modeOfOperation = newMode;
             SaveUiSettings();
+            SendAvtpSourceFilterCommand();
 
             UpdateLiveUiEnabledState();
 
@@ -1579,9 +1580,32 @@ namespace VilsSharpX
                     }
 
                     AdapterModeCommand.SendAdapterMode(txDev, _controlMode, _canUartMode, AppendDiagLog);
+                    SendAvtpSourceFilterCommand();
                 }
                 else
                     AppendDiagLog("[cmd] No NIC selected — adapter-mode command not sent");
+            }
+            catch (Exception ex) { AppendDiagLog($"[cmd] {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// Tells the SmartVisio Box which AVTP source to reassemble. While the app
+        /// generates the stream in Direct control, a second source on the same
+        /// multicast address (CANoe) would interleave its packets into the same
+        /// frame and corrupt it, so the box is locked onto our source MAC.
+        /// </summary>
+        private void SendAvtpSourceFilterCommand()
+        {
+            try
+            {
+                string? txDev = GetTxPcapDeviceNameOrNull();
+                if (string.IsNullOrWhiteSpace(txDev))
+                    return;
+
+                bool lockOnGenerator = _controlMode == 1
+                    && _modeOfOperation == ModeOfOperation.PlayerFromFiles;
+
+                AvtpSourceFilterCommand.Send(txDev, lockOnGenerator ? _srcMac : null, AppendDiagLog);
             }
             catch (Exception ex) { AppendDiagLog($"[cmd] {ex.Message}"); }
         }
@@ -3438,6 +3462,7 @@ namespace VilsSharpX
                 _dstMac = TxtDstMac.Text?.Trim() ?? "01:00:5E:16:00:12";
 
             SaveUiSettings();
+            SendAvtpSourceFilterCommand();
         }
         private void ShowIdleGradient()
         {
