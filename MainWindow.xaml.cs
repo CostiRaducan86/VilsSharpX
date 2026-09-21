@@ -1157,6 +1157,13 @@ namespace VilsSharpX
             {
                 try
                 {
+                    bool sourceChanged;
+                    lock (_frameLock)
+                        sourceChanged = _latestA != null && IsAbruptFrameTransition(_latestA.Data, frame);
+
+                    if (sourceChanged)
+                        ResetSyncState();
+
                     var aLive = new Frame(_currentWidth, _currentHeight, frame,
                         _liveCapture.LastAvtpFrameUtc == DateTime.MinValue ? DateTime.UtcNow : _liveCapture.LastAvtpFrameUtc);
                     PushSyncFrame(aLive);
@@ -5222,6 +5229,31 @@ namespace VilsSharpX
                 sumSq += (long)v * v;
             }
             _syncRingVarPerPx[idx] = ((double)n * sumSq - (double)sum * sum) / ((double)n * n);
+        }
+
+        private static bool IsAbruptFrameTransition(byte[] previous, byte[] current)
+        {
+            if (previous.Length != current.Length || previous.Length == 0)
+                return false;
+
+            const int SampleStep = 8;
+            const int DifferenceThreshold = 24;
+            int changedPixels = 0;
+            long totalDifference = 0;
+            int sampledPixels = 0;
+
+            for (int i = 0; i < current.Length; i += SampleStep)
+            {
+                int difference = Math.Abs(current[i] - previous[i]);
+                totalDifference += difference;
+                if (difference >= DifferenceThreshold)
+                    changedPixels++;
+                sampledPixels++;
+            }
+
+            double meanDifference = (double)totalDifference / sampledPixels;
+            double changedRatio = (double)changedPixels / sampledPixels;
+            return meanDifference >= 18.0 && changedRatio >= 0.20;
         }
 
         /// <summary>
