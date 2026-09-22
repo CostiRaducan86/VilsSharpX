@@ -30,14 +30,14 @@ X103 is a 2x20 connector. The project-relevant pins are:
 | 2 | V_UC | 5V0 |
 | 3 | GND | Ground |
 | 4 | GND | Ground |
-| 7 | P14.8 | ASCLIN1 RX (LVDS existing path) |
+| 7 | P14.8 | ASCLIN1 RX (LVDS existing path TTL_FROM_ECU_3V3) |
 | 8 | P14.7 | LOCAL_RL_DET ( GPIO in current adapter_ctrl) |
 | 9 | P14.6 | CAN_SEL |
 | 10 | P20.0 | TTL_SEL |
 | 11 | P21.4 | LED_POWER_SEL |
 | 5 | P21.2 | RL_DET_SEL |
 | 6 | P21.3 | LOGIC_5V_SEL |
-| 15 | P02.2 | ASCLIN1 TX (LVDS existing path) |
+| 15 | P02.2 | ASCLIN1 TX (LVDS existing path TTL_FROM_LOCAL) |
 | 16 | P02.3 | CAMERA TRIGGER (Basler Camera hw trigger) |
 | 28 | P00.6 | ASCLIN5 RX (CAN_RX_ECU) |
 | 29 | P00.7 | ASCLIN5 TX (CAN_TX_ECU) |

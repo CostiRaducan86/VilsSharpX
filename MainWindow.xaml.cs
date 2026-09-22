@@ -2761,7 +2761,7 @@ namespace VilsSharpX
                     _canDiagTraceLoaded;
         }
 
-        private void BtnCanReplay_Click(object sender, RoutedEventArgs e)
+        private async void BtnCanReplay_Click(object sender, RoutedEventArgs e)
         {
             if (_controlMode != 1 || _canDiagRecording)
                 return;
@@ -2781,13 +2781,13 @@ namespace VilsSharpX
                 var trace = _canDiagStore.SnapshotOldestFirst(0, _canDiagStore.Count);
                 if (_currentDeviceType == LsmDeviceType.Nichia)
                 {
-                    NichiaStartupSequenceCommand.Send(txDev, trace, AppendDiagLog);
+                    await Task.Run(() => NichiaStartupSequenceCommand.Send(txDev, trace, AppendDiagLog));
                     MessageBox.Show("The NICHIA start-up sequence was uploaded to AURIX.",
                         "Replay", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
-                    OsramStartupSequenceCommand.Send(txDev, trace, AppendDiagLog);
+                    await Task.Run(() => OsramStartupSequenceCommand.Send(txDev, trace, AppendDiagLog));
                     MessageBox.Show("The OSRAM start-up sequence was uploaded to AURIX.",
                     "Replay", MessageBoxButton.OK, MessageBoxImage.Information);
                 }

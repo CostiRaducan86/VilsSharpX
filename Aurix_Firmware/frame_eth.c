@@ -1629,6 +1629,8 @@ void frame_eth_poll_rx(void)
                                 ((uint32)pRxBuf[23] << 8u) | pRxBuf[24];
                         len = pRxBuf[25];
                         expectResponse = pRxBuf[26];
+                        if (index == 0u)
+                            can_uart_master_wait_for_uploaded_start();
                         (void)can_uart_master_stage_step(index, total, gapUs, len,
                                                           expectResponse, &pRxBuf[27]);
                     }

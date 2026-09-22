@@ -1,5 +1,6 @@
 #include "adapter_ctrl.h"
 #include "IfxPort.h"
+#include "Stm/Std/IfxStm.h"
 
 /*
  * SmartVisio Adapter GPIO control implementation.
@@ -23,6 +24,10 @@
 
 static adapter_control_mode_t s_controlMode = ADAPTER_MODE_ECU;
 static adapter_can_uart_mode_t s_canUartMode = CAN_UART_ECU_LSM;
+static boolean s_logic5vPending = FALSE;
+static uint32 s_logic5vEnableDeadline = 0u;
+
+#define ADAPTER_POWER_SETTLE_US 200000u
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 static void pin_set(Ifx_P *port, uint8 pin, boolean level)
@@ -58,7 +63,11 @@ void adapter_ctrl_init(void)
 
 void adapter_ctrl_set_mode(adapter_control_mode_t mode)
 {
+    uint32 now;
+
     s_controlMode = mode;
+    pin_set(PIN_LOGIC_5V_SEL, FALSE);
+    s_logic5vPending = FALSE;
 
     if (mode == ADAPTER_MODE_ECU)
     {
@@ -73,10 +82,29 @@ void adapter_ctrl_set_mode(adapter_control_mode_t mode)
     {
         /* No ECU: SmartVisio drives LVDS via P02.2 (ASCLIN1 TX), Local 5V powers adapter */
         adapter_ctrl_set_ttl_source(ADAPTER_TTL_LOCAL);
-        pin_set(PIN_LOGIC_5V_SEL,  TRUE);  /* Enable Local 5V */
+        pin_set(PIN_LED_POWER_SEL, TRUE);   /* External LED power (relay ON) */
+        now = (uint32)IfxStm_getLower(&MODULE_STM0);
+        s_logic5vEnableDeadline = now +
+                                  (uint32)IfxStm_getTicksFromMicroseconds(
+                                      &MODULE_STM0, ADAPTER_POWER_SETTLE_US);
+        s_logic5vPending = TRUE;
         pin_set(PIN_LOCAL_RL_DET,  FALSE); /* Default LOW = GND = low resolution */
         pin_set(PIN_RL_DET_SEL,    TRUE);  /* Local RL detect path*/
-        pin_set(PIN_LED_POWER_SEL, TRUE);  /* External LED power (relay ON) */
+    }
+}
+
+void adapter_ctrl_tick(void)
+{
+    uint32 now;
+
+    if (!s_logic5vPending)
+        return;
+
+    now = (uint32)IfxStm_getLower(&MODULE_STM0);
+    if ((uint32)(now - s_logic5vEnableDeadline) < 0x80000000u)
+    {
+        pin_set(PIN_LOGIC_5V_SEL, TRUE);
+        s_logic5vPending = FALSE;
     }
 }
 

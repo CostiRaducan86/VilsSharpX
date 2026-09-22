@@ -88,6 +88,11 @@ typedef struct
     volatile uint32 outRingDrops;      /* completed frames dropped before CPU0  */
     volatile uint32 outRingHighWater;  /* highest number of queued output frames */
 
+    volatile uint32 uploadStepsReceived; /* valid upload step packets received */
+    volatile uint32 uploadStepRejects;   /* upload step packets rejected       */
+    volatile uint32 uploadCommitsReceived; /* upload commit packets received   */
+    volatile uint32 uploadCommitRejects;   /* upload commits rejected           */
+
     volatile uint32 rxOverflows;       /* LSM RX FIFO overflows, bytes lost   */
     volatile uint32 tailBytes;         /* bytes still arriving after a closed answer */
     volatile uint32 lastTailLen;       /* tail of the last completed read      */

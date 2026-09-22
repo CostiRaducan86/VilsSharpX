@@ -79,6 +79,7 @@ void adapter_ctrl_init(void);
 
 /* Apply the Control Mode (ECU vs Direct). */
 void adapter_ctrl_set_mode(adapter_control_mode_t mode);
+void adapter_ctrl_tick(void);
 
 /* Return the currently selected adapter control mode. */
 adapter_control_mode_t adapter_ctrl_get_mode(void);

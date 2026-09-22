@@ -241,7 +241,10 @@ boolean can_uart_master_stage_step(uint16 index, uint16 total, uint32 gapUs,
         (total > (is_nichia_mode() ? CAN_UART_MASTER_NICHIA_UPLOADED_MAX
                        : CAN_UART_MASTER_UPLOADED_MAX)) || (index >= total) ||
         (len == 0u) || (len > CAN_UART_MASTER_NICHIA_REQ_MAX))
+    {
+        g_canUartMasterStats.uploadStepRejects++;
         return FALSE;
+    }
 
     if ((index == 0u) || (s_uploadedExpectedCount != total))
     {
@@ -268,14 +271,19 @@ boolean can_uart_master_stage_step(uint16 index, uint16 total, uint32 gapUs,
     }
     if ((uint16)(index + 1u) > s_uploadedStartupCount)
         s_uploadedStartupCount = (uint16)(index + 1u);
+    g_canUartMasterStats.uploadStepsReceived++;
     return TRUE;
 }
 
 boolean can_uart_master_commit_staged(uint16 total)
 {
+    g_canUartMasterStats.uploadCommitsReceived++;
     if ((total == 0u) || (total != s_uploadedExpectedCount) ||
         (s_uploadedStartupCount != total))
+    {
+        g_canUartMasterStats.uploadCommitRejects++;
         return FALSE;
+    }
 
     s_uploadedStartupValid = TRUE;
     if (s_waitingForUploadedStart)

@@ -300,6 +300,7 @@ void core0_main(void)
          * Must run every iteration to drain all RX buffers and prevent
          * DMA descriptor ring exhaustion. */
         frame_eth_poll_rx();
+        adapter_ctrl_tick();
         lvds_fault_tick();
         direct_mode_tick();
         lvds_tx_tick();
