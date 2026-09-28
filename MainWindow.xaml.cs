@@ -1462,7 +1462,37 @@ namespace VilsSharpX
             if (_settingsManager.IsLoading || !IsLoaded) return;
 
             _ecuVariant = CmbEcuVariant?.SelectedIndex ?? 0;
+            ApplyStreamIdForEcuVariant();
             SaveUiSettings();
+        }
+
+        private const string StreamIdByteLeft = "0x50";
+        private const string StreamIdByteRight = "0x51";
+
+        /// <summary>
+        /// MB PLU-HD LH/RH headlamps listen on different AVTP streams (last Stream ID byte
+        /// 0x50 = left, 0x51 = right). CHLC variants keep the manually configured byte.
+        /// </summary>
+        private void ApplyStreamIdForEcuVariant()
+        {
+            string? streamIdByte = _ecuVariant switch
+            {
+                0 or 2 => StreamIdByteLeft,
+                1 or 3 => StreamIdByteRight,
+                _ => null
+            };
+
+            if (streamIdByte == null
+                || string.Equals(_streamIdLastByte, streamIdByte, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _streamIdLastByte = streamIdByte;
+            if (TxtStreamIdLastByte != null)
+                TxtStreamIdLastByte.Text = streamIdByte;
+
+            AppendDiagLog(_txManager.IsReady
+                ? $"[avtp-tx] ECU variant {_ecuVariant}: Stream ID byte -> {streamIdByte} (applied on next Start)"
+                : $"[avtp-tx] ECU variant {_ecuVariant}: Stream ID byte -> {streamIdByte}");
         }
 
         private void CmbLvdsMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
