@@ -1598,4 +1598,5 @@ void prepareTestPicture()
     }
   }
   index = 0; 
+  staticImageReady = 0;
 }

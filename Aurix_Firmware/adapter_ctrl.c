@@ -11,6 +11,11 @@
  *
  * Active bridge mode (ECU↔SmartVisio↔LSM) is enabled by setting CAN_SEL
  * (TTL_SEL LOW, RL_DET_SEL LOW, LOGIC_5V_SEL LOW, CAN_SEL HIGH, LED_POWER_SEL LOW).
+ *
+ * Direct mode power sequence mirrors the ECU power-on order:
+ *   enter: LOGIC_5V_SEL HIGH, then LED_POWER_SEL HIGH after ADAPTER_LED_POWER_DELAY_US.
+ *   leave: LED_POWER_SEL LOW, then LOGIC_5V_SEL LOW after ADAPTER_RELAY_RELEASE_US.
+ * LED power applied before logic 5V back-feeds the LSM logic rail.
  */
 
 /* ─── Pin definitions ────────────────────────────────────────────── */
@@ -24,10 +29,13 @@
 
 static adapter_control_mode_t s_controlMode = ADAPTER_MODE_ECU;
 static adapter_can_uart_mode_t s_canUartMode = CAN_UART_ECU_LSM;
-static boolean s_logic5vPending = FALSE;
-static uint32 s_logic5vEnableDeadline = 0u;
+static boolean s_modeApplied = FALSE;
+static boolean s_logicLocal = FALSE;
+static boolean s_powerStepPending = FALSE;
+static uint32 s_powerStepDeadline = 0u;
 
-#define ADAPTER_POWER_SETTLE_US 200000u
+#define ADAPTER_LED_POWER_DELAY_US 150000u  /* Measured ECU order: LED power ~150 ms after logic 5V */
+#define ADAPTER_RELAY_RELEASE_US    20000u  /* K1 G2RL release time margin */
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 static void pin_set(Ifx_P *port, uint8 pin, boolean level)
@@ -36,6 +44,13 @@ static void pin_set(Ifx_P *port, uint8 pin, boolean level)
         IfxPort_setPinHigh(port, pin);
     else
         IfxPort_setPinLow(port, pin);
+}
+
+static void schedule_power_step(uint32 delayUs)
+{
+    s_powerStepDeadline = (uint32)IfxStm_getLower(&MODULE_STM0) +
+                          (uint32)IfxStm_getTicksFromMicroseconds(&MODULE_STM0, delayUs);
+    s_powerStepPending = TRUE;
 }
 
 /* ─── Public API ──────────────────────────────────────────────────── */
@@ -63,33 +78,45 @@ void adapter_ctrl_init(void)
 
 void adapter_ctrl_set_mode(adapter_control_mode_t mode)
 {
-    uint32 now;
+    boolean transition;
 
+    /* The PC repeats SET_ADAPTER_MODE; only a real transition may touch the supplies. */
+    transition = (!s_modeApplied || (mode != s_controlMode)) ? TRUE : FALSE;
     s_controlMode = mode;
-    pin_set(PIN_LOGIC_5V_SEL, FALSE);
-    s_logic5vPending = FALSE;
+    s_modeApplied = TRUE;
 
     if (mode == ADAPTER_MODE_ECU)
     {
         /* ECU in chain: ECU drives LVDS, ECU provides 5V logic */
         adapter_ctrl_set_ttl_source(ADAPTER_TTL_ECU);
-        pin_set(PIN_LOGIC_5V_SEL,  FALSE);  /* Enable ECU 5V */
         pin_set(PIN_LOCAL_RL_DET,  FALSE);  /* Local RL level irrelevant (ECU drives) */
         pin_set(PIN_RL_DET_SEL,    FALSE);  /* ECU RL detect path*/
-        pin_set(PIN_LED_POWER_SEL, FALSE);  /* ECU LED power (relay OFF) */
+
+        if (transition)
+        {
+            s_powerStepPending = FALSE;
+            pin_set(PIN_LED_POWER_SEL, FALSE);  /* ECU LED power (relay OFF) */
+            if (s_logicLocal)
+                schedule_power_step(ADAPTER_RELAY_RELEASE_US);
+            else
+                pin_set(PIN_LOGIC_5V_SEL, FALSE);  /* ECU 5V */
+        }
     }
     else /* ADAPTER_MODE_DIRECT */
     {
         /* No ECU: SmartVisio drives LVDS via P02.2 (ASCLIN1 TX), Local 5V powers adapter */
         adapter_ctrl_set_ttl_source(ADAPTER_TTL_LOCAL);
-        pin_set(PIN_LED_POWER_SEL, TRUE);   /* External LED power (relay ON) */
-        now = (uint32)IfxStm_getLower(&MODULE_STM0);
-        s_logic5vEnableDeadline = now +
-                                  (uint32)IfxStm_getTicksFromMicroseconds(
-                                      &MODULE_STM0, ADAPTER_POWER_SETTLE_US);
-        s_logic5vPending = TRUE;
         pin_set(PIN_LOCAL_RL_DET,  FALSE); /* Default LOW = GND = low resolution */
-        pin_set(PIN_RL_DET_SEL,    TRUE);  /* Local RL detect path*/
+        pin_set(PIN_RL_DET_SEL,    TRUE);  /* Local RL detect path, valid before LSM power-up */
+
+        if (transition)
+        {
+            s_powerStepPending = FALSE;
+            pin_set(PIN_LED_POWER_SEL, FALSE);
+            pin_set(PIN_LOGIC_5V_SEL,  TRUE);  /* Local 5V logic first */
+            s_logicLocal = TRUE;
+            schedule_power_step(ADAPTER_LED_POWER_DELAY_US);
+        }
     }
 }
 
@@ -97,14 +124,22 @@ void adapter_ctrl_tick(void)
 {
     uint32 now;
 
-    if (!s_logic5vPending)
+    if (!s_powerStepPending)
         return;
 
     now = (uint32)IfxStm_getLower(&MODULE_STM0);
-    if ((uint32)(now - s_logic5vEnableDeadline) < 0x80000000u)
+    if ((uint32)(now - s_powerStepDeadline) >= 0x80000000u)
+        return;
+
+    s_powerStepPending = FALSE;
+    if (s_controlMode == ADAPTER_MODE_DIRECT)
     {
-        pin_set(PIN_LOGIC_5V_SEL, TRUE);
-        s_logic5vPending = FALSE;
+        pin_set(PIN_LED_POWER_SEL, TRUE);   /* External LED power (relay ON) */
+    }
+    else
+    {
+        pin_set(PIN_LOGIC_5V_SEL, FALSE);   /* Back to ECU 5V after relay release */
+        s_logicLocal = FALSE;
     }
 }
 
