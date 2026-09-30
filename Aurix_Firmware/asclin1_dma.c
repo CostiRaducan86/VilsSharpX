@@ -136,11 +136,23 @@ static void asclin1_dma_configure(uint32 baud, LvdsFrameMode frameMode)
     /* Baud rate */
     cfg.baudrate.baudrate     = (float32)baud;
     cfg.baudrate.prescaler    = 1;
-    cfg.baudrate.oversampling = IfxAsclin_OversamplingFactor_8;
 
     /* Bit timing */
-    cfg.bitTiming.samplePointPosition = IfxAsclin_SamplePointPosition_3;
-    cfg.bitTiming.medianFilter        = IfxAsclin_SamplesPerBit_three;
+    if (frameMode == Frame_8Odd1)
+    {
+        /* Osram 20 Mbaud: 10x gives fOVS = fASCLINF (200 MHz, no fractional
+         * jitter); median-of-3 at ticks 4..6 = 20..30 ns, the bit centre.
+         * Long FTB harnesses delay P14.8 edges by up to ~24 ns, which the
+         * former early sample point (ticks 1..3 of 8) turned into bit errors. */
+        cfg.baudrate.oversampling         = IfxAsclin_OversamplingFactor_10;
+        cfg.bitTiming.samplePointPosition = IfxAsclin_SamplePointPosition_6;
+    }
+    else
+    {
+        cfg.baudrate.oversampling         = IfxAsclin_OversamplingFactor_8;
+        cfg.bitTiming.samplePointPosition = IfxAsclin_SamplePointPosition_3;
+    }
+    cfg.bitTiming.medianFilter = IfxAsclin_SamplesPerBit_three;
 
     /* Frame format */
     cfg.frame.dataLength = IfxAsclin_DataLength_8;

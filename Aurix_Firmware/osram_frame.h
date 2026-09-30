@@ -5,7 +5,7 @@
  * osram_frame.h — Osram UART frame parser
  *
  * Parses the Osram async serial protocol from a raw UART byte stream
- * (delivered via DMA buffers from ASCLIN9).
+ * (delivered via DMA buffers from ASCLIN1).
  *
  * Protocol per packet (25608 bytes):
  *   [0..3]       Header pattern: 0x80, 0xA5, 0xAA, 0x55

@@ -24,7 +24,7 @@
 /* Nichia: 12.5 Mbaud, 8N1, oversampling 8 */
 #define DM_NICHIA_BAUD        12500000u
 
-/* Osram:  20 Mbaud, 8O1 (odd parity), oversampling 5 */
+/* Osram:  20 Mbaud, 8O1 (odd parity), oversampling 10, centre sample point */
 #define DM_OSRAM_BAUD         20000000u
 
 /* ─── API ─── */
