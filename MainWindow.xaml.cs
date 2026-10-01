@@ -3317,9 +3317,12 @@ namespace VilsSharpX
 
             // FPS from Ethernet capture
             double fps = _nichiaEthCapture?.FpsEma ?? _osramEthCapture?.FpsEma ?? 0;
-            LblLvdsFps.Text = $"FPS: {fps:F1}";
-            UpdateMainEcuState(fps);
-            _communicationFaultControlWindow?.UpdateEcuState(fps);
+            if (!_playback.IsPaused)
+            {
+                LblLvdsFps.Text = $"FPS: {fps:F1}";
+                UpdateMainEcuState(fps);
+                _communicationFaultControlWindow?.UpdateEcuState(fps);
+            }
 
             // Status text is now shown only in Frame Statistics, no need to duplicate here
 
@@ -3971,6 +3974,9 @@ namespace VilsSharpX
             }
             _lastLvdsFrameUtc = DateTime.UtcNow;
             _lvdsSignalLost = true;
+            if (LblLvdsFps != null) LblLvdsFps.Text = "FPS: 0.0";
+            UpdateMainEcuState(0.0);
+            _communicationFaultControlWindow?.UpdateEcuState(0.0);
 
             // Don't clear the sync ring on resume — it contains valid A frames
             // pushed during pause that correspond to B frames still in the ECU pipeline.
