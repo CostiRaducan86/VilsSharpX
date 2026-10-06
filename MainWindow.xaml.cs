@@ -502,7 +502,7 @@ namespace VilsSharpX
 
             // Re-subscribe to LiveCaptureManager events (since we recreated the instance)
             if (_liveCapture != null)
-                _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(frame, meta));
+                _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLiveFrameReady(frame, meta));
 
             // Rebind bitmaps to UI
             if (ImgA != null) ImgA.Source = _wbA;
@@ -1003,7 +1003,8 @@ namespace VilsSharpX
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             // Hook LiveCaptureManager -> update UI with frame info (frame storage is already done in the manager)
-            _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.Invoke(() => HandleLiveFrameReady(frame, meta));
+            // BeginInvoke: a blocking Invoke would stall the Npcap thread and drop AVTP packets when the UI is busy.
+            _liveCapture.OnFrameReady += (frame, meta) => Dispatcher.BeginInvoke(() => HandleLiveFrameReady(frame, meta));
 
             ShowIdleGradient();
             int w = GetCurrentWidth();
@@ -1692,8 +1693,7 @@ namespace VilsSharpX
                 StopNichiaEthCapture();
                 string? nicHint = LiveNicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
                 _nichiaEthCapture = NichiaEthCapture.Start(nicHint, AppendDiagLog);
-                _nichiaEthCapture.OnFrameReady += (frame, meta) =>
-                    Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+                _nichiaEthCapture.OnFrameReady += QueueLvdsFrame;
                 AppendDiagLog("[nfe] Nichia Ethernet capture started");
             }
             catch (Exception ex)
@@ -1719,8 +1719,7 @@ namespace VilsSharpX
                 StopOsramEthCapture();
                 string? nicHint = LiveNicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
                 _osramEthCapture = OsramEthCapture.Start(nicHint, AppendDiagLog);
-                _osramEthCapture.OnFrameReady += (frame, meta) =>
-                    Dispatcher.BeginInvoke(() => HandleLvdsFrameReady(frame, meta));
+                _osramEthCapture.OnFrameReady += QueueLvdsFrame;
                 AppendDiagLog("[ofe] Osram Ethernet capture started");
             }
             catch (Exception ex)
@@ -3302,7 +3301,57 @@ namespace VilsSharpX
             }
         }
 
-        private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta)
+        private sealed record PendingLvdsFrame(byte[] Frame, LvdsFrameMeta Meta);
+        private PendingLvdsFrame? _pendingLvdsFrame;
+        private int _lvdsMatchWorkerActive;
+
+        /// <summary>
+        /// Called on the pcap thread. Hands the frame to a single background worker that
+        /// runs the A/B sync search, so neither the pcap thread nor the UI thread is blocked.
+        /// If matching falls behind, only the newest pending B frame is kept.
+        /// </summary>
+        private void QueueLvdsFrame(byte[] frame, LvdsFrameMeta meta)
+        {
+            Volatile.Write(ref _pendingLvdsFrame, new PendingLvdsFrame(frame, meta));
+            if (Interlocked.CompareExchange(ref _lvdsMatchWorkerActive, 1, 0) == 0)
+                _ = Task.Run(RunLvdsMatchWorker);
+        }
+
+        private void RunLvdsMatchWorker()
+        {
+            while (true)
+            {
+                var item = Interlocked.Exchange(ref _pendingLvdsFrame, null);
+                if (item == null)
+                {
+                    Volatile.Write(ref _lvdsMatchWorkerActive, 0);
+                    // A frame may have been queued between the exchange and the flag reset.
+                    if (Volatile.Read(ref _pendingLvdsFrame) == null
+                        || Interlocked.CompareExchange(ref _lvdsMatchWorkerActive, 1, 0) != 0)
+                        return;
+                    continue;
+                }
+
+                try
+                {
+                    var matched = FindBestMatchA(item.Frame, _currentWidth * _currentHeight);
+                    // Synchronous Invoke gives back-pressure: a slow UI coalesces B frames
+                    // in _pendingLvdsFrame instead of growing the dispatcher queue.
+                    Dispatcher.Invoke(() => HandleLvdsFrameReady(item.Frame, item.Meta, matched));
+                }
+                catch (TaskCanceledException)
+                {
+                    Volatile.Write(ref _lvdsMatchWorkerActive, 0);
+                    return; // dispatcher shutting down
+                }
+                catch (Exception ex)
+                {
+                    AppendDiagLog($"[lvds-sync] frame {item.Meta.FrameId} match/dispatch failed: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        private void HandleLvdsFrameReady(byte[] frame, LvdsFrameMeta meta, Frame? matched)
         {
             // Guard: reject stale callbacks that arrive via Dispatcher.BeginInvoke
             // after Stop has been pressed.
@@ -3330,16 +3379,13 @@ namespace VilsSharpX
             // so B frames still find the correct A. But don't update _latestB or render.
             if (_playback.IsPaused)
             {
-                var pauseMatch = FindBestMatchA(frame, _currentWidth * _currentHeight);
-                lock (_frameLock) { _matchedAForDiff = pauseMatch; }
+                lock (_frameLock) { _matchedAForDiff = matched; }
                 return;
             }
 
-            // Find best-matching A frame BEFORE storing B, then store both
+            // The best-matching A frame was found on the LVDS worker; store it with B
             // atomically under _frameLock so GeneratorLoopAsync always reads
             // a consistent (B, matchedA) pair.
-            var matched = FindBestMatchA(frame, _currentWidth * _currentHeight);
-
             lock (_frameLock)
             {
                 _cameraDisplaySyncEnabled = true;
@@ -3741,6 +3787,9 @@ namespace VilsSharpX
             {
                 a = _playback.IsPaused ? _pausedA : _latestA;
                 b = _playback.IsPaused ? _pausedB : _latestB;
+                // Latest A leads real LVDS B by the ECU latency; use the A that pane D compares against.
+                if (!_playback.IsPaused && b != null && _matchedAForDiff != null && HasRecentLvdsFrame())
+                    a = _matchedAForDiff;
             }
 
             if (a == null || b == null)
@@ -4695,9 +4744,10 @@ namespace VilsSharpX
                 if (!useRealEthB)
                     _playback.IncrementCountB();
         
-                // D: diff — use frame-matched A when real ETH B is active
+                // D: diff — use frame-matched A when real ETH B is active.
+                // AVTP Live renders D in RenderAll; this Gray8 copy is only a hover fallback there.
                 Frame diffA = (useRealEthB && genMatchedA != null) ? genMatchedA : a;
-                var d = AbsDiff(diffA, b);
+                Frame? d = _modeOfOperation == ModeOfOperation.AvtpLiveMonitor ? null : AbsDiff(diffA, b);
         
                 // -----------------------------
                 // AVTP Ethernet TX (ONLY PlayerFromFiles)
@@ -4900,20 +4950,17 @@ namespace VilsSharpX
             // Ensure A reflects newest source even if GeneratorLoop is stopped
             Frame a;
             Frame b;
-            Frame d;
             lock (_frameLock)
             {
                 if (_playback.IsPaused && _pausedA != null)
                 {
                     a = _pausedA;
                     b = _pausedB ?? a;
-                    d = _pausedD ?? AbsDiff(a, b);
                 }
                 else
                 {
                     a = _latestA ?? new Frame(_currentWidth, _currentHeight, GetASourceBytes(), DateTime.UtcNow);
                     b = _latestB ?? a;
-                    d = _latestD ?? AbsDiff(a, b);
                 }
             }
 
@@ -5032,7 +5079,7 @@ namespace VilsSharpX
             {
                 var dCopy = new byte[_diffBgr.Length];
                 Buffer.BlockCopy(_diffBgr, 0, dCopy, 0, dCopy.Length);
-                _recordingManager.TryEnqueueFrame(a.Data, b.Data, dCopy);
+                _recordingManager.TryEnqueueFrame(aForPostProcess.Data, b.Data, dCopy);
             }
 
             if (LblDiffMode != null)
@@ -5363,12 +5410,15 @@ namespace VilsSharpX
                 long aSum = 0;
                 long aSumSq = 0;
                 long abSum = 0;
+                long sad = 0;
                 for (int j = 0; j < expectedLen; j++)
                 {
                     int a = aData[j];
+                    int b = bData[j];
                     aSum += a;
                     aSumSq += (long)a * a;
-                    abSum += (long)a * bData[j];
+                    abSum += (long)a * b;
+                    sad += Math.Abs(a - b);
                 }
 
                 double aNVar = (double)expectedLen * aSumSq - (double)aSum * aSum;
@@ -5385,10 +5435,6 @@ namespace VilsSharpX
                     double covN = (double)expectedLen * abSum - (double)aSum * bSum;
                     ncc = covN / Math.Sqrt(aNVar * bNVar);
                 }
-
-                long sad = 0;
-                for (int j = 0; j < expectedLen; j++)
-                    sad += Math.Abs(aData[j] - bData[j]);
 
                 // A nearly uniform A frame has no meaningful NCC, but it can
                 // still be the exact temporal predecessor of a structured B

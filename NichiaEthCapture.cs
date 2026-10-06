@@ -128,7 +128,7 @@ public sealed class NichiaEthCapture : IDisposable
         var cap = new NichiaEthCapture(dev, log);
 
         // Open in promiscuous mode (so we don't need our NIC's MAC to match).
-        cap._device.Open(DeviceModes.Promiscuous, 1000);
+        NetworkInterfaceUtils.OpenForLiveCapture(cap._device, 1000, log, "nfe");
 
         try
         {

@@ -289,22 +289,14 @@ namespace VilsSharpX
                 Buffer.BlockCopy(frame, 0, displayFrame, 0, copyLen);
             }
 
-            // Publish a NEW array atomically (copy-on-publish).
-            // The consumer reads via Volatile.Read(ref _avtpFrame) and gets an
-            // immutable, fully-written buffer — no torn frames possible.
-            int len = _displayWidth * _displayHeight;
-            var newBuf = new byte[len];
-            int copyBytes = Math.Min(len, displayFrame.Length);
-            Buffer.BlockCopy(displayFrame, 0, newBuf, 0, copyBytes);
-            Volatile.Write(ref _avtpFrame, newBuf);
+            // Publish atomically. The reassembler already emits a fresh copy per frame and
+            // all consumers treat it as read-only, so it can be shared without extra copies.
+            Volatile.Write(ref _avtpFrame, displayFrame);
             Volatile.Write(ref _hasAvtpFrame, true);
             _lastAvtpFrameUtc = DateTime.UtcNow;
 
-            // Publish the full 320×80 frame for TX (avoids crop→repad)
-            int avtpLen = RvfReassembler.W * RvfReassembler.H;
-            var txBuf = new byte[avtpLen];
-            Buffer.BlockCopy(frame, 0, txBuf, 0, Math.Min(frame.Length, avtpLen));
-            Volatile.Write(ref _avtpTxFrame, txBuf);
+            // Full 320×80 frame for TX (avoids crop→repad)
+            Volatile.Write(ref _avtpTxFrame, frame);
             Interlocked.Increment(ref _frameGeneration);
 
             // Forward to subscribers (at display resolution)

@@ -14,6 +14,27 @@ namespace VilsSharpX
     public static class NetworkInterfaceUtils
     {
         /// <summary>
+        /// Npcap kernel buffer for live capture; absorbs bursts while the callback thread is briefly busy.
+        /// </summary>
+        public const int CaptureKernelBufferBytes = 16 * 1024 * 1024;
+
+        /// <summary>
+        /// Opens a capture device in promiscuous mode with an enlarged kernel buffer.
+        /// </summary>
+        public static void OpenForLiveCapture(ICaptureDevice dev, int readTimeoutMs, Action<string>? log, string logTag)
+        {
+            var config = new DeviceConfiguration
+            {
+                Mode = DeviceModes.Promiscuous,
+                ReadTimeout = readTimeoutMs,
+                BufferSize = CaptureKernelBufferBytes,
+            };
+            config.ConfigurationFailed += (_, e) =>
+                log?.Invoke($"[{logTag}] capture config '{e.Property}' not applied: {e.Error}");
+            dev.Open(config);
+        }
+
+        /// <summary>
         /// BPF filter for capturing AVTP frames (ethertype 0x22F0), including VLAN-tagged variants.
         /// </summary>
         public static string GetAvtpBpfFilter()

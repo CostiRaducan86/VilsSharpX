@@ -6,9 +6,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>docs\icon\SmartVisio.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefaultItemExcludes>$(DefaultItemExcludes);Aurix_Firmware\**;scripts\**;docs\**;python_sdk\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="docs\icon\SmartVisio.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SharpAvi" Version="3.0.0" />
@@ -30,6 +35,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="VilsSharpX.Tests" />
+  </ItemGroup>
+
+  <!-- WPF falls back to software rendering inside RDP sessions; allow GPU rendering when the host has one. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Media.EnableHardwareAccelerationInRdp" Value="true" />
   </ItemGroup>
 
 </Project>

@@ -145,7 +145,7 @@ public sealed class AvtpLiveCapture : IDisposable
 
         // Promiscuous so we don't depend on destination MAC.
         // Timeout to allow clean shutdown.
-        cap._device.Open(DeviceModes.Promiscuous, 1000);
+        NetworkInterfaceUtils.OpenForLiveCapture(cap._device, 1000, log, "avtp-live");
 
         // BPF filter: AVTP ethertype (0x22F0), robust for VLAN and QinQ.
         // Some setups tag the stream (802.1Q / 802.1ad), so match both plain and vlan encapsulated.

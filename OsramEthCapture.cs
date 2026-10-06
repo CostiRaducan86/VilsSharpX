@@ -111,7 +111,7 @@ public sealed class OsramEthCapture : IDisposable
         log?.Invoke($"[ofe] using device: name='{dev.Name}' desc='{dev.Description}'");
 
         var cap = new OsramEthCapture(dev, log);
-        cap._device.Open(DeviceModes.Promiscuous, 1000);
+        NetworkInterfaceUtils.OpenForLiveCapture(cap._device, 1000, log, "ofe");
 
         try
         {
