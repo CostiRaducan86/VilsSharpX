@@ -20,8 +20,23 @@
                 <MenuItem Header="API Configuration" Click="MenuApiConfig_Click"/>
             </MenuItem>
             <MenuItem Header="_Tools">
-                <MenuItem x:Name="MenuOsramDefectControl" Header="OSRAM Defect Injection Control" Click="MenuOsramDefectControl_Click"/>
-                <MenuItem x:Name="MenuNichiaDefectControl" Header="NICHIA Defect Injection Control" Click="MenuNichiaDefectControl_Click"/>
+                <MenuItem.Resources>
+                    <Style x:Key="DisabledDefectMenuTooltip" TargetType="MenuItem">
+                        <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+                        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="ToolTipService.IsEnabled" Value="True"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Resources>
+                <MenuItem x:Name="MenuOsramDefectControl" Header="OSRAM Defect Injection Control" Click="MenuOsramDefectControl_Click"
+                          Style="{StaticResource DisabledDefectMenuTooltip}"
+                          ToolTip="Available only with LSM Device Type Osram 2.0 or 2.05 and CAN UART Mode ECU-SmartVisio-LSM."/>
+                <MenuItem x:Name="MenuNichiaDefectControl" Header="NICHIA Defect Injection Control" Click="MenuNichiaDefectControl_Click"
+                          Style="{StaticResource DisabledDefectMenuTooltip}"
+                          ToolTip="Available only with LSM Device Type Nichia and CAN UART Mode ECU-SmartVisio-LSM."/>
                 <MenuItem x:Name="MenuCommunicationFaultControl" Header="Communication Fault Injection Control" Click="MenuCommunicationFaultControl_Click"/>
                 <MenuItem Header="Flicker Monitoring and Control" Click="MenuFlickerControl_Click"/>
                 <MenuItem Header="AVTP LVDS Simulation Control" Click="MenuLvdsSimulationControl_Click"/>

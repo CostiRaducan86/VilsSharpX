@@ -1533,18 +1533,20 @@ namespace VilsSharpX
             SaveUiSettings();
             SendAdapterModeCommand();
             UpdateCanDiagRecordingButtons();
+            ApplyDeviceTypeConstraints();
             UpdateCommunicationFaultAvailability();
             UpdateCanDiagStatusText();
         }
 
         private void ApplyDeviceTypeConstraints()
         {
-            bool isNichia = _currentDeviceType == LsmDeviceType.Nichia;
+            bool canInjectDefects = _canUartMode == 1;
 
             if (MenuOsramDefectControl != null)
-                MenuOsramDefectControl.IsEnabled = !isNichia;
+                MenuOsramDefectControl.IsEnabled = canInjectDefects
+                    && (_currentDeviceType == LsmDeviceType.Osram20 || _currentDeviceType == LsmDeviceType.Osram205);
             if (MenuNichiaDefectControl != null)
-                MenuNichiaDefectControl.IsEnabled = isNichia;
+                MenuNichiaDefectControl.IsEnabled = canInjectDefects && _currentDeviceType == LsmDeviceType.Nichia;
         }
 
         private void ClearActiveLvdsFaultForExternalChange()
@@ -1609,6 +1611,7 @@ namespace VilsSharpX
                 _canUartMode = requiredCanUartMode;
             }
 
+            ApplyDeviceTypeConstraints();
             UpdateCanDiagRecordingButtons();
         }
 
