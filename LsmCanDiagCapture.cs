@@ -66,7 +66,9 @@ public sealed class LsmCanDiagCapture : IDisposable
 
     public static LsmCanDiagCapture Start(string? deviceHint, Action<string>? log)
     {
-        var devices = CaptureDeviceList.Instance;
+        // Private device objects: the Instance singleton is shared with AVTP/LVDS captures,
+        // whose Stop/Close and BPF filter would otherwise silently kill this capture.
+        var devices = CaptureDeviceList.New();
         if (devices.Count == 0)
             throw new InvalidOperationException("No capture devices found. Is Npcap installed?");
 
