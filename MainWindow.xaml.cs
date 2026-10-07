@@ -202,7 +202,8 @@ namespace VilsSharpX
         private bool _canUartLedPhaseGreen;
         private volatile bool _canDiagRecording;  // starts false — user presses Record to begin
         private bool _canDiagTraceLoaded;
-        private DateTime _canRecordSessionStart = DateTime.MinValue; // filters stale Dispatcher-queued records
+        private DateTime _canRecordSessionStart = DateTime.MinValue; // filters stale Dispatcher-queued records (LsmCanDiagParser clock)
+        private long _canDiagStaleDiscards;
         private DispatcherTimer? _canDiagRetryTimer; // resends START if CD stays 0
         private DispatcherTimer? _canDiagWatchdogTimer; // auto-heals long-run silent recording stalls
         private static readonly TimeSpan CanDiagRefreshInterval = TimeSpan.FromMilliseconds(200);
@@ -302,6 +303,10 @@ namespace VilsSharpX
         private DateTime _lastBaslerFrameUtc = DateTime.MinValue;
         /// <summary>Persistent flag: true when Basler signal timed out (no trigger from ECU), cleared on new frame.</summary>
         private bool _baslerSignalLost;
+        // A running grab with no frame for this long is treated as a dead camera link.
+        private static readonly TimeSpan BaslerStallTimeout = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan BaslerReopenCooldown = TimeSpan.FromSeconds(30);
+        private DateTime _lastBaslerReopenUtc = DateTime.MinValue;
         /// <summary>After the first LVDS frame, camera display is released in LVDS order.</summary>
         private bool _cameraDisplaySyncEnabled;
         private int _lvdsCameraDisplayCredits;
@@ -2234,7 +2239,11 @@ namespace VilsSharpX
             // before the current Record session started (fixes duplicate Seqs
             // leaking from a previous recording after Clear + Record).
             if (record.ReceivedUtc < _canRecordSessionStart)
+            {
+                if (Interlocked.Increment(ref _canDiagStaleDiscards) == 1)
+                    AppendDiagLog($"[can] discarding stale record: received {(_canRecordSessionStart - record.ReceivedUtc).TotalMilliseconds:F0} ms before Record");
                 return;
+            }
 
             if (!_canHasPreviousSourceTimestamp)
             {
@@ -2566,8 +2575,15 @@ namespace VilsSharpX
         /// </summary>
         private void EnsureCanDiagCapture()
         {
+            // The startup listener opens before settings load and may auto-pick another NIC
+            // (e.g. the office port on multi-NIC PCs), so follow the selected LVDS NIC here.
+            string? nicHint = LiveNicSelector.GetSelectedDeviceName(CmbLiveNic) ?? _avtpLiveDeviceHint;
             if (_canDiagCapture is not null && _canDiagCapture.IsCapturing)
-                return;
+            {
+                if (_canDiagCapture.MatchesDevice(nicHint))
+                    return;
+                AppendDiagLog($"[can] capture NIC differs from selected NIC '{nicHint}'; restarting capture");
+            }
             StartCanDiagCapture();
         }
 
@@ -2585,8 +2601,11 @@ namespace VilsSharpX
 
             // Mark session start BEFORE sending START — any records with ReceivedUtc
             // earlier than this are stale leftovers from the Dispatcher queue.
-            _canRecordSessionStart = DateTime.UtcNow;
-            _canDiagLastRecordUtc = _canRecordSessionStart;
+            // ReceivedUtc comes from the parser's Stopwatch clock; DateTime.UtcNow can be
+            // stepped by Windows time sync and would then reject every record.
+            _canRecordSessionStart = LsmCanDiagParser.CaptureUtcNow;
+            Interlocked.Exchange(ref _canDiagStaleDiscards, 0);
+            _canDiagLastRecordUtc = DateTime.UtcNow;
             _canDiagSessionHadTraffic = false;
             _canDiagConsecutiveRestarts = 0;
             _canDiagWatchdogRecovering = false;
@@ -2682,7 +2701,10 @@ namespace VilsSharpX
             }
 
             // CD still 0 — resend START
-            AppendDiagLog("[cmd] DiagSniff retry: CD:0 — resending START");
+            var cap = _canDiagCapture;
+            AppendDiagLog(cap == null
+                ? "[cmd] DiagSniff retry: CD:0, no capture open — resending START"
+                : $"[cmd] DiagSniff retry: CD:0 (nic='{cap.DeviceDescription}', rx={cap.TotalPackets}, os={cap.OsMagicMatches}, ni={cap.NiMagicMatches}, cdRejected={cap.DiagRejected}, other88b5={cap.Other88b5Matches}) — resending START");
             SendDiagSniffStart();
         }
 
@@ -2723,8 +2745,9 @@ namespace VilsSharpX
                 StopCanDiagCapture();
                 StartCanDiagCapture();
 
-                _canRecordSessionStart = DateTime.UtcNow;
-                _canDiagLastRecordUtc = _canRecordSessionStart;
+                _canRecordSessionStart = LsmCanDiagParser.CaptureUtcNow;
+                Interlocked.Exchange(ref _canDiagStaleDiscards, 0);
+                _canDiagLastRecordUtc = DateTime.UtcNow;
                 _canDiagSessionHadTraffic = false;
                 _canDiagCapture?.ResetCounters();
 
@@ -4865,6 +4888,7 @@ namespace VilsSharpX
             // Keep camera acquisition aligned with the current LVDS state even
             // when a mode transition skips the LVDS timeout edge.
             SynchronizeBaslerTriggerWithLvds();
+            RecoverStalledBaslerCapture();
 
             // AVTP Live: if CANoe (or the source) stops while we're still Running, clear the
             // last frame and fall back to the no-signal "Waiting for signal" UI.
@@ -5150,6 +5174,45 @@ namespace VilsSharpX
                 _baslerCapture.UseHardwareTrigger();
             else
                 _baslerCapture.UseFreeRunFallback();
+        }
+
+        /// <summary>
+        /// Reopens the pylon device when it lost its connection or stopped delivering
+        /// frames; otherwise pane C stays on "Signal not available" until an app restart.
+        /// </summary>
+        private void RecoverStalledBaslerCapture()
+        {
+            // The config window drives the camera while it is open.
+            if (!_playback.IsRunning || _playback.IsPaused || _cameraConfigWindow != null)
+                return;
+            if (DateTime.UtcNow - _lastBaslerReopenUtc < BaslerReopenCooldown)
+                return;
+
+            var capture = _baslerCapture;
+            string? reason = capture == null ? "no camera open"
+                : capture.IsConnectionLost ? "connection lost"
+                : !capture.IsCapturing ? "grab not running"
+                : capture.IsStalled(BaslerStallTimeout) ? $"no frame for {BaslerStallTimeout.TotalSeconds:F0} s"
+                : null;
+            if (reason == null)
+                return;
+
+            _lastBaslerReopenUtc = DateTime.UtcNow;
+            AppendDiagLog($"[basler] Reopening camera: {reason}"
+                + (capture == null ? "" : $" (freeRun={capture.IsFreeRunFallback}, frames={capture.FramesCompleted}, lastFrameUtc={capture.LastFrameUtc:HH:mm:ss})"));
+            StopBaslerCapture();
+            StartBaslerCapture(useFreeRunFallback: true);
+        }
+
+        /// <summary>UI thread only: reopens the pane C camera and returns it once ready (null on failure).</summary>
+        private async Task<BaslerCameraCapture?> ReopenBaslerCaptureAsync()
+        {
+            StopBaslerCapture();
+            StartBaslerCapture(useFreeRunFallback: true);
+            await _baslerWork;
+            // Let the dispatcher callback that publishes _baslerCapture run first.
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            return _baslerCapture;
         }
 
         private void UpdateFpsLabels()
@@ -6750,8 +6813,20 @@ namespace VilsSharpX
         private void MenuCameraConfig_Click(object sender, RoutedEventArgs e)
         {
             if (_cameraConfigWindow is { IsVisible: true }) { _cameraConfigWindow.Activate(); return; }
-            _cameraConfigWindow = new CameraConfigWindow(AppendDiagLog, _baslerCapture);
-            _cameraConfigWindow.Closed += (_, _) => _cameraConfigWindow = null;
+            bool releasedForConfig = false;
+            _cameraConfigWindow = new CameraConfigWindow(AppendDiagLog, _baslerCapture, () =>
+            {
+                releasedForConfig = true;
+                StopBaslerCapture();
+                return _baslerWork;
+            }, ReopenBaslerCaptureAsync);
+            _cameraConfigWindow.Closed += (_, _) =>
+            {
+                _cameraConfigWindow = null;
+                // The config window owned the camera; hand it back to pane C.
+                if (releasedForConfig && _baslerCapture == null)
+                    StartBaslerCapture(useFreeRunFallback: true);
+            };
             _cameraConfigWindow.Show();
         }
 

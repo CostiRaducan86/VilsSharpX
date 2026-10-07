@@ -22,7 +22,9 @@ public partial class CameraConfigWindow : Window
     private readonly Action<string> _log;
     private string? _loadedPfsPath;
     private PfsConfigParser? _loadedPfs;
-    private readonly BaslerCameraCapture? _sharedCapture; // non-null = camera already open from MainWindow
+    private BaslerCameraCapture? _sharedCapture; // non-null = camera already open from MainWindow
+    private readonly Func<Task>? _releaseSharedCapture; // asks MainWindow to close its camera
+    private readonly Func<Task<BaslerCameraCapture?>>? _reopenSharedCapture; // asks MainWindow to reopen it
 
     // Zoom state
     private bool _isFitMode = true;
@@ -42,16 +44,22 @@ public partial class CameraConfigWindow : Window
     private double _fpsEma;
     private long _frameCount;
 
-    public CameraConfigWindow(Action<string> log, BaslerCameraCapture? sharedCapture = null)
+    public CameraConfigWindow(Action<string> log, BaslerCameraCapture? sharedCapture = null,
+        Func<Task>? releaseSharedCapture = null,
+        Func<Task<BaslerCameraCapture?>>? reopenSharedCapture = null)
     {
         InitializeComponent();
         _log = log;
-        _sharedCapture = sharedCapture;
+        _releaseSharedCapture = releaseSharedCapture;
+        _reopenSharedCapture = reopenSharedCapture;
         PopulateComboDefaults();
+        PreviewKeyDown += Window_PreviewKeyDown;
 
-        // If camera is already running from MainWindow, enter shared mode
-        if (_sharedCapture != null && _sharedCapture.IsCapturing)
+        // If the camera is already open from MainWindow, enter shared mode
+        // (even when its grab is stopped: the device is exclusive-access).
+        if (sharedCapture?.InternalCamera != null)
         {
+            _sharedCapture = sharedCapture;
             Loaded += (_, _) => EnterSharedMode();
         }
     }
@@ -72,14 +80,14 @@ public partial class CameraConfigWindow : Window
         }
 
         BtnConnectToggle.IsChecked = true;
-        BtnConnectToggle.IsEnabled = false; // can't disconnect externally managed camera
+        BtnConnectToggle.IsEnabled = _releaseSharedCapture != null;
 
         string model = _camera.CameraInfo[CameraInfoKey.ModelName] ?? "?";
         string serial = _camera.CameraInfo[CameraInfoKey.SerialNumber] ?? "?";
         TxtStatus.Text = $"Connected (external): {model} ({serial})";
         _log($"[camcfg] Shared mode: {model} (S/N {serial})");
 
-        _isGrabbing = true; // grab is running externally
+        _isGrabbing = _sharedCapture.IsCapturing;
 
         // Read params in background to avoid blocking the UI
         Task.Run(() =>
@@ -97,7 +105,55 @@ public partial class CameraConfigWindow : Window
         TxtNoPreview.Visibility = Visibility.Collapsed;
 
         UpdateButtonStates();
-        SetGrabbingParamsEnabled(false); // can't change AOI while grabbing
+        SetGrabbingParamsEnabled(!_isGrabbing); // can't change AOI while grabbing
+    }
+
+    /// <summary>
+    /// Hands the shared camera back from MainWindow so this window can own it
+    /// (Disconnect, then Connect opens it locally with full parameter control).
+    /// </summary>
+    private async Task ReleaseSharedModeAsync()
+    {
+        if (_sharedCapture == null || _releaseSharedCapture == null) return;
+
+        _sharedCapture.OnFrameReady -= OnSharedFrameReady;
+        _sharedCapture = null;
+        _camera = null;
+        _isGrabbing = false;
+        BtnConnectToggle.IsEnabled = false;
+        TxtStatus.Text = "Disconnecting...";
+        UpdateButtonStates();
+
+        try
+        {
+            await _releaseSharedCapture();
+        }
+        catch (Exception ex)
+        {
+            _log($"[camcfg] Release shared camera error: {ex.Message}");
+        }
+
+        TxtStatus.Text = "Disconnected";
+        TxtFps.Text = "--";
+        BtnConnectToggle.IsEnabled = true;
+        SetGrabbingParamsEnabled(true);
+        UpdateButtonStates();
+        _log("[camcfg] Shared camera released by MainWindow");
+    }
+
+    /// <summary>Enter in the parameter panel writes the edited values to the camera.</summary>
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || _camera == null) return;
+        if (e.OriginalSource is not (TextBox or ComboBox or ComboBoxItem or CheckBox)) return;
+
+        if (_isGrabbing)
+            ApplyLiveParameters();
+        else
+            ApplyParametersToCamera();
+        ReadParametersFromCamera();
+        _log($"[camcfg] Parameters applied (grabbing={_isGrabbing}), ExposureTimeRaw={TbExposureTime.Text}");
+        e.Handled = true;
     }
 
     private void OnSharedFrameReady(byte[] frame, int w, int h)
@@ -110,25 +166,62 @@ public partial class CameraConfigWindow : Window
     //  Toolbar handlers
     // ═══════════════════════════════════════════════════════════════
 
-    private void BtnConnectToggle_Checked(object sender, RoutedEventArgs e)
+    private async void BtnConnectToggle_Checked(object sender, RoutedEventArgs e)
     {
         // In shared mode, connection is already established via EnterSharedMode()
         if (_sharedCapture != null) return;
+        if (_reopenSharedCapture != null)
+        {
+            // Pane C and this window must use the same pylon device (exclusive access).
+            await ReconnectSharedModeAsync();
+            return;
+        }
         ConnectCamera();
         if (_camera == null)
             BtnConnectToggle.IsChecked = false; // revert if failed
     }
 
-    private void BtnConnectToggle_Unchecked(object sender, RoutedEventArgs e)
+    private async Task ReconnectSharedModeAsync()
     {
-        // In shared mode, cannot disconnect
-        if (_sharedCapture != null) return;
+        BtnConnectToggle.IsEnabled = false;
+        TxtStatus.Text = "Connecting...";
+
+        BaslerCameraCapture? capture = null;
+        try
+        {
+            capture = await _reopenSharedCapture!();
+        }
+        catch (Exception ex)
+        {
+            _log($"[camcfg] Reopen shared camera error: {ex.Message}");
+        }
+
+        BtnConnectToggle.IsEnabled = true;
+        if (capture?.InternalCamera == null)
+        {
+            TxtStatus.Text = "Connect failed (see diagnostic.log)";
+            BtnConnectToggle.IsChecked = false;
+            return;
+        }
+
+        _sharedCapture = capture;
+        EnterSharedMode();
+    }
+
+    private async void BtnConnectToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_sharedCapture != null)
+        {
+            await ReleaseSharedModeAsync();
+            return;
+        }
         DisconnectCamera();
     }
     private void BtnContinuousShot_Click(object sender, RoutedEventArgs e)
     {
         if (_sharedCapture != null)
         {
+            ApplyParametersToCamera();
             _sharedCapture.StartGrab();
             _isGrabbing = true;
             SetGrabbingParamsEnabled(false);
@@ -369,7 +462,8 @@ public partial class CameraConfigWindow : Window
         }
         _previewBitmap.WritePixels(new Int32Rect(0, 0, w, h), frame, w, 0);
         TxtResolution.Text = $"{w} × {h}";
-        TxtFps.Text = _isGrabbing ? $"{_fpsEma:F1} fps" : "--";
+        double fps = _sharedCapture != null ? _sharedCapture.FpsEma : _fpsEma;
+        TxtFps.Text = _isGrabbing ? $"{fps:F1} fps" : "--";
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -574,6 +668,24 @@ public partial class CameraConfigWindow : Window
         // Config sets
         TryApplyCombo(p[PLCamera.UserSetSelector], CbUserSetSelector);
         TryApplyCombo(p[PLCamera.UserSetDefaultSelector], CbDefaultStartupSet);
+    }
+
+    /// <summary>Applies only the features the camera accepts while grabbing.</summary>
+    private void ApplyLiveParameters()
+    {
+        if (_camera == null) return;
+        var p = _camera.Parameters;
+
+        TryApplyLong(p[PLCamera.OffsetX], TbOffsetX);
+        TryApplyLong(p[PLCamera.OffsetY], TbOffsetY);
+        TryApplyCombo(p[PLCamera.GainAuto], CbGainAuto);
+        TryApplyLong(p[PLCamera.GainRaw], TbGainRaw);
+        TryApplyCheck(p[PLCamera.GammaEnable], ChkGammaEnable);
+        TryApplyDouble(p[PLCamera.Gamma], TbGamma);
+        TryApplyLong(p[PLCamera.DigitalShift], TbDigitalShift);
+        TryApplyDouble(p[PLCamera.TriggerDelayAbs], TbTriggerDelay);
+        TryApplyCombo(p[PLCamera.ExposureAuto], CbExposureAuto);
+        TryApplyLong(p[PLCamera.ExposureTimeRaw], TbExposureTime);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -895,7 +1007,7 @@ public partial class CameraConfigWindow : Window
             _sharedCapture.OnFrameReady -= OnSharedFrameReady;
 
         // Only disconnect if we own the camera (not shared mode)
-        if (_sharedCapture == null || !_sharedCapture.IsCapturing)
+        if (_sharedCapture == null)
             DisconnectCamera();
         else
             _camera = null; // release reference without closing

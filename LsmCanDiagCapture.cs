@@ -20,6 +20,7 @@ public sealed class LsmCanDiagCapture : IDisposable
     private long _niMagicMatches;
     private long _osMagicMatches;
     private long _other88b5Matches;
+    private long _diagRejected;
     private volatile string _lastParserError = string.Empty;
 
     public event Action<LsmCanDiagRecord>? OnRecordReady;
@@ -30,6 +31,18 @@ public sealed class LsmCanDiagCapture : IDisposable
     public long NiMagicMatches => Interlocked.Read(ref _niMagicMatches);
     public long OsMagicMatches => Interlocked.Read(ref _osMagicMatches);
     public long Other88b5Matches => Interlocked.Read(ref _other88b5Matches);
+    /// <summary>CD-magic packets the parser rejected (e.g. firmware/app protocol version mismatch).</summary>
+    public long DiagRejected => Interlocked.Read(ref _diagRejected);
+    public string DeviceDescription => _device.Description ?? _device.Name ?? string.Empty;
+
+    /// <summary>True when this capture was opened on the NIC that <paramref name="hint"/> selects.</summary>
+    public bool MatchesDevice(string? hint)
+    {
+        if (string.IsNullOrWhiteSpace(hint)) return true;
+        hint = hint.Trim();
+        return (_device.Name?.Contains(hint, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (_device.Description?.Contains(hint, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
     public string LastParserError => _lastParserError;
     public bool IsCapturing { get; private set; }
 
@@ -41,6 +54,7 @@ public sealed class LsmCanDiagCapture : IDisposable
         Interlocked.Exchange(ref _niMagicMatches, 0);
         Interlocked.Exchange(ref _osMagicMatches, 0);
         Interlocked.Exchange(ref _other88b5Matches, 0);
+        Interlocked.Exchange(ref _diagRejected, 0);
         _lastParserError = string.Empty;
     }
 
@@ -128,7 +142,13 @@ public sealed class LsmCanDiagCapture : IDisposable
                     switch (magic)
                     {
                         case 0x4344:
-                            Interlocked.Increment(ref _diagMagicMatches);
+                            if (Interlocked.Increment(ref _diagRejected) == 1 && data.Length >= offset + 12)
+                            {
+                                int ver = data[offset + 4];
+                                int type = data[offset + 5];
+                                int len = (data[offset + 8] << 8) | data[offset + 9];
+                                _log?.Invoke($"[can] CD packet rejected by parser: version={ver}, recordType={type}, payloadLen={len}, frameLen={data.Length} (expected v2/type 1/len {LsmCanDiagRecord.PayloadLength})");
+                            }
                             break;
                         case 0x4E49:
                             Interlocked.Increment(ref _niMagicMatches);

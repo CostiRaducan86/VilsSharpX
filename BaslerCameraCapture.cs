@@ -23,6 +23,16 @@ public sealed class BaslerCameraCapture : IDisposable
     public long FramesCompleted { get; private set; }
     public bool IsCapturing { get; private set; }
     public bool IsFreeRunFallback { get; private set; }
+    public bool IsConnectionLost { get; private set; }
+
+    // Written on the pylon grab thread, read on the UI thread.
+    private long _lastFrameTicksUtc = DateTime.UtcNow.Ticks;
+    public DateTime LastFrameUtc => new(Interlocked.Read(ref _lastFrameTicksUtc), DateTimeKind.Utc);
+
+    /// <summary>True when the grab runs but no frame arrived within <paramref name="timeout"/>.</summary>
+    public bool IsStalled(TimeSpan timeout) => DateTime.UtcNow - LastFrameUtc > timeout;
+
+    private void MarkFrameClock() => Interlocked.Exchange(ref _lastFrameTicksUtc, DateTime.UtcNow.Ticks);
 
     public int FrameWidth { get; private set; }
     public int FrameHeight { get; private set; }
@@ -71,6 +81,7 @@ public sealed class BaslerCameraCapture : IDisposable
     {
         _camera = new Camera();
         _camera.CameraOpened += (sender, e) => Configuration.AcquireContinuous(sender!, e);
+        _camera.ConnectionLost += OnConnectionLost;
         _camera.Open();
 
         // Log camera info
@@ -94,10 +105,18 @@ public sealed class BaslerCameraCapture : IDisposable
         // Start grabbing with the internal grab-loop thread (LatestImages = always get freshest frame)
         _camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByStreamGrabber);
         IsCapturing = true;
+        MarkFrameClock();
         _fpsSw.Restart();
         _fpsFrameCount = 0;
         FpsEma = 0;
         _log("[basler] Grab started (LatestImages, ProvidedByStreamGrabber)");
+    }
+
+    private void OnConnectionLost(object? sender, EventArgs e)
+    {
+        IsConnectionLost = true;
+        IsCapturing = false;
+        _log($"[basler] Camera connection lost (frames={FramesCompleted}, freeRun={IsFreeRunFallback})");
     }
 
     public void UseHardwareTrigger()
@@ -113,6 +132,7 @@ public sealed class BaslerCameraCapture : IDisposable
 
             _camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByStreamGrabber);
             IsCapturing = true;
+            MarkFrameClock();
             _fpsSw.Restart();
             _fpsFrameCount = 0;
             FpsEma = 0;
@@ -141,6 +161,7 @@ public sealed class BaslerCameraCapture : IDisposable
             _camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByStreamGrabber);
             IsCapturing = true;
             IsFreeRunFallback = true;
+            MarkFrameClock();
             _fpsSw.Restart();
             _fpsFrameCount = 0;
             FpsEma = 0;
@@ -195,6 +216,7 @@ public sealed class BaslerCameraCapture : IDisposable
             Buffer.BlockCopy(srcPixels, 0, frame, 0, frame.Length);
 
             FramesCompleted++;
+            MarkFrameClock();
             UpdateFps();
             FrameWidth = w;
             FrameHeight = h;
@@ -321,6 +343,7 @@ public sealed class BaslerCameraCapture : IDisposable
             if (!_camera.StreamGrabber.IsGrabbing)
             {
                 _camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByStreamGrabber);
+                MarkFrameClock();
                 _fpsSw.Restart();
                 _fpsFrameCount = 0;
                 FpsEma = 0;
@@ -360,6 +383,7 @@ public sealed class BaslerCameraCapture : IDisposable
         try
         {
             _camera.StreamGrabber.Start(GrabStrategy.LatestImages, GrabLoop.ProvidedByStreamGrabber);
+            MarkFrameClock();
             _fpsSw.Restart();
             _fpsFrameCount = 0;
             FpsEma = 0;

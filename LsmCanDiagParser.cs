@@ -9,6 +9,9 @@ public static class LsmCanDiagParser
     private static readonly long TimestampOriginTicks = DateTime.UtcNow.Ticks;
     private static readonly long TimestampOriginStopwatch = Stopwatch.GetTimestamp();
 
+    /// <summary>Clock used for <see cref="LsmCanDiagRecord.ReceivedUtc"/>; compare record times only against it.</summary>
+    public static DateTime CaptureUtcNow => GetCaptureUtcNow();
+
     private static DateTime GetCaptureUtcNow()
     {
         long elapsedStopwatch = Stopwatch.GetTimestamp() - TimestampOriginStopwatch;
