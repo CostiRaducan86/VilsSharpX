@@ -109,8 +109,9 @@ void can_uart_bridge_tick(void);
  *  once per main-loop iteration. */
 void can_uart_bridge_poll_out(void);
 
-/** Reset soft counters and parser/accumulator state (does NOT re-init the
- *  ASCLIN channels). */
+/** Reset soft counters, mirrored debugger stats and parser/accumulator state
+ *  (does NOT re-init the ASCLIN channels or change bridge status).  Call from
+ *  CPU2, which owns the bridge RX ISRs and counters. */
 void can_uart_bridge_reset_state(void);
 
 #endif /* CAN_UART_BRIDGE_H */

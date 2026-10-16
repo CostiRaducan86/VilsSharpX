@@ -109,6 +109,7 @@ static bridge_dir_t  s_ecuDir;    /* RX from ECU  -> forward to LSM TX */
 static bridge_dir_t  s_lsmDir;    /* RX from LSM  -> forward to ECU TX */
 
 static volatile uint8 s_bridgeActive;  /* 1 = forwarding + capturing       */
+static uint8          s_statsActive;   /* CPU2-owned session marker */
 static uint8          s_deviceId = BRIDGE_DEVICE_OSRAM;
 static uint32         s_ticksPerUs = 100u;  /* STM0 ticks per microsecond  */
 
@@ -1091,6 +1092,14 @@ void can_uart_bridge_tick(void)
     if (g_canUartBridgeStats.initOk == 0u)
         return;
 
+    /* Clear the previous session once after forwarding has been disabled.
+     * This runs on CPU2, alongside the bridge ISRs that own the counters. */
+    if ((s_bridgeActive == 0u) && (s_statsActive != 0u))
+    {
+        can_uart_bridge_reset_state();
+        s_statsActive = 0u;
+    }
+
     /* Safety net for a lost RX interrupt: the pump is re-entrancy guarded and
      * returns at once when both FIFOs are empty, and the CPU2 loop is far
      * faster than the 96 us a full 16-byte FIFO takes at 2 Mbaud. */
@@ -1118,7 +1127,10 @@ void can_uart_bridge_tick(void)
      * bus switch do not corrupt the first real transaction. */
     if (s_enableReq != 0u)
     {
-        boolean intState = IfxCpu_disableInterrupts();
+        boolean intState;
+
+        can_uart_bridge_reset_state();
+        intState = IfxCpu_disableInterrupts();
         s_relay        = BRIDGE_RELAY_IDLE;
         s_fwdCount     = 0u;
         s_echoCount    = 0u;
@@ -1131,6 +1143,7 @@ void can_uart_bridge_tick(void)
         IfxCpu_restoreInterrupts(intState);
 
         g_canUartBridgeStats.active = 1u;
+        s_statsActive = 1u;
     }
 
     bridge_mon_tick();
@@ -1226,6 +1239,27 @@ void can_uart_bridge_reset_state(void)
     s_relayReqCount = 0u;
     s_relayRspCount = 0u;
     s_relayResyncs  = 0u;
+
+    g_canUartBridgeStats.ecuRxBytes       = 0u;
+    g_canUartBridgeStats.ecuTxForwarded   = 0u;
+    g_canUartBridgeStats.ecuTxDropped     = 0u;
+    g_canUartBridgeStats.ecuFramesBridged = 0u;
+    g_canUartBridgeStats.ecuOverflow      = 0u;
+    g_canUartBridgeStats.ecuEchoDiscarded = 0u;
+    g_canUartBridgeStats.ecuNoiseSkipped  = 0u;
+
+    g_canUartBridgeStats.lsmRxBytes       = 0u;
+    g_canUartBridgeStats.lsmTxForwarded   = 0u;
+    g_canUartBridgeStats.lsmTxDropped     = 0u;
+    g_canUartBridgeStats.lsmFramesBridged = 0u;
+    g_canUartBridgeStats.lsmOverflow      = 0u;
+    g_canUartBridgeStats.lsmEchoDiscarded = 0u;
+    g_canUartBridgeStats.lsmNoiseSkipped  = 0u;
+
+    g_canUartBridgeStats.relayState       = (uint32)BRIDGE_RELAY_IDLE;
+    g_canUartBridgeStats.relayReqCount    = 0u;
+    g_canUartBridgeStats.relayRspCount    = 0u;
+    g_canUartBridgeStats.relayResyncs     = 0u;
 
     IfxCpu_restoreInterrupts(intState);
 }
