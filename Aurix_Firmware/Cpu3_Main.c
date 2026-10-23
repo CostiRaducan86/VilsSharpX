@@ -28,6 +28,7 @@
 #include "IfxCpu.h"
 #include "IfxScuWdt.h"
 #include "Ifx_Cfg_Ssw.h"
+#include "sys_tick.h"
 
 extern IfxCpu_syncEvent cpuSyncEvent;
 
@@ -43,6 +44,9 @@ void core3_main(void)
     /* Wait for CPU sync event */
     IfxCpu_emitEvent(&cpuSyncEvent);
     IfxCpu_waitEvent(&cpuSyncEvent, 1);
+
+    /* 1 ms system tick (g_sysTickMs), serviced by CPU3 on STM3 CMP0 */
+    sys_tick_init();
     
     while(1)
     {
